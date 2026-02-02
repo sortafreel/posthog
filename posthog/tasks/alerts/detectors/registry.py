@@ -64,7 +64,15 @@ def _ensure_registered():
     if _REGISTERED:
         return
 
+    # Import all detector modules to trigger registration
+    # Statistical detectors (no external dependencies)
     from posthog.tasks.alerts.detectors import threshold  # noqa: F401
-    from posthog.tasks.alerts.detectors.statistical import zscore  # noqa: F401
+    from posthog.tasks.alerts.detectors.statistical import iqr, mad, zscore  # noqa: F401
+
+    # PyOD detectors (optional - require pyod package)
+    try:
+        from posthog.tasks.alerts.detectors.pyod_detectors import copod, ecod, isolation_forest, knn  # noqa: F401
+    except ImportError:
+        logger.warning("PyOD not installed - ML-based detectors (ECOD, COPOD, IsolationForest, KNN) unavailable")
 
     _REGISTERED = True
