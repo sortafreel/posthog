@@ -58,6 +58,7 @@ export enum PluginServerMode {
     cdp_legacy_on_event = 'cdp-legacy-on-event',
     evaluation_scheduler = 'evaluation-scheduler',
     ingestion_logs = 'ingestion-logs',
+    ingestion_error_tracking = 'ingestion-error-tracking',
     cdp_batch_hogflow_requests = 'cdp-batch-hogflow-requests',
     cdp_cyclotron_shadow_worker = 'cdp-cyclotron-shadow-worker',
     recording_api = 'recording-api',
@@ -330,6 +331,13 @@ export type LogsIngestionConsumerConfig = {
     KAFKA_CLIENT_RACK: string | undefined
 }
 
+export type ErrorTrackingConsumerConfig = {
+    ERROR_TRACKING_CONSUMER_GROUP_ID: string
+    ERROR_TRACKING_CONSUMER_CONSUME_TOPIC: string
+    ERROR_TRACKING_CONSUMER_DLQ_TOPIC: string
+    ERROR_TRACKING_CONSUMER_OVERFLOW_TOPIC: string
+}
+
 export type SessionRecordingApiConfig = {
     SESSION_RECORDING_API_REDIS_HOST: string
     SESSION_RECORDING_API_REDIS_PORT: number
@@ -398,6 +406,7 @@ export interface PluginsServerConfig
     extends CdpConfig,
         IngestionConsumerConfig,
         LogsIngestionConsumerConfig,
+        ErrorTrackingConsumerConfig,
         SessionRecordingConfig,
         SessionRecordingApiConfig {
     CONTINUOUS_PROFILING_ENABLED: boolean
@@ -571,6 +580,7 @@ export interface PluginServerCapabilities {
     ingestionV2Combined?: boolean
     ingestionV2?: boolean
     logsIngestion?: boolean
+    errorTrackingIngestion?: boolean
     sessionRecordingBlobIngestionV2?: boolean
     sessionRecordingBlobIngestionV2Overflow?: boolean
     cdpProcessedEvents?: boolean
