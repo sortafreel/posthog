@@ -882,6 +882,70 @@ class TestEndpointExecution(ClickhouseTestMixin, APIBaseTest):
             self.assertIn("has(breakdown_value", query_sql)
             self.assertIn("chrome", query_sql)
 
+    def test_materialized_insight_endpoint_filters_by_multiple_breakdowns(self):
+        endpoint = create_endpoint_with_version(
+            name="mat_trends_multi_bd",
+            team=self.team,
+            query=TrendsQuery(
+                series=[EventsNode(event="$pageview")],
+                breakdownFilter={
+                    "breakdowns": [
+                        {"property": "$browser", "type": "event"},
+                        {"property": "$os", "type": "event"},
+                    ]
+                },
+            ).model_dump(),
+            created_by=self.user,
+            is_active=True,
+        )
+        self._materialize_endpoint(endpoint)
+
+        with mock.patch.object(EndpointViewSet, "_execute_query_and_respond", return_value=Response({})) as mock_exec:
+            response = self.client.post(
+                f"/api/environments/{self.team.id}/endpoints/{endpoint.name}/run/",
+                {"variables": {"$browser": "Chrome", "$os": "Mac"}},
+                format="json",
+            )
+
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+            mock_exec.assert_called()
+            query_request_data = mock_exec.call_args[0][0]
+            query_sql = query_request_data["query"]["query"].lower()
+            # Multiple breakdowns use array index access on breakdown_value
+            self.assertIn("breakdown_value[1]", query_sql)
+            self.assertIn("breakdown_value[2]", query_sql)
+            self.assertNotIn("has(", query_sql)
+            self.assertIn("chrome", query_sql)
+            self.assertIn("mac", query_sql)
+
+    def test_materialized_insight_endpoint_requires_all_multiple_breakdowns(self):
+        endpoint = create_endpoint_with_version(
+            name="mat_trends_multi_bd_req",
+            team=self.team,
+            query=TrendsQuery(
+                series=[EventsNode(event="$pageview")],
+                breakdownFilter={
+                    "breakdowns": [
+                        {"property": "$browser", "type": "event"},
+                        {"property": "$os", "type": "event"},
+                    ]
+                },
+            ).model_dump(),
+            created_by=self.user,
+            is_active=True,
+        )
+        self._materialize_endpoint(endpoint)
+
+        # Only providing one of the two required breakdown variables should fail
+        response = self.client.post(
+            f"/api/environments/{self.team.id}/endpoints/{endpoint.name}/run/",
+            {"variables": {"$browser": "Chrome"}},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("required", response.json()["detail"].lower())
+
     def test_materialized_insight_endpoint_rejects_date_variables(self):
         endpoint = create_endpoint_with_version(
             name="mat_trends_dates",
@@ -1047,7 +1111,7 @@ class TestEndpointExecution(ClickhouseTestMixin, APIBaseTest):
         # is_materialized is derived from saved_query.table_id — False until Temporal creates the table
         self.assertFalse(response.json()["is_materialized"])
 
-    def test_endpoint_with_multiple_breakdowns_cannot_be_materialized(self):
+    def test_endpoint_with_multiple_breakdowns_can_be_materialized(self):
         endpoint = create_endpoint_with_version(
             name="multi_breakdown",
             team=self.team,
@@ -1064,18 +1128,16 @@ class TestEndpointExecution(ClickhouseTestMixin, APIBaseTest):
             is_active=True,
         )
 
-        # Endpoint creation should succeed
         self.assertIsNotNone(endpoint.id)
 
-        # But enabling materialization should fail
         response = self.client.patch(
             f"/api/environments/{self.team.id}/endpoints/{endpoint.name}/",
             {"is_materialized": True, "sync_frequency": DataWarehouseSyncInterval.FIELD_24HOUR},
             format="json",
         )
 
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("multiple breakdowns", response.json()["detail"].lower())
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertFalse(response.json()["is_materialized"])  # not yet materialized until Temporal runs
 
     # =========================================================================
     # ENDPOINT EXECUTION WITHOUT VARIABLES (SIMPLE CASES)
@@ -1195,7 +1257,6 @@ class TestEndpointExecution(ClickhouseTestMixin, APIBaseTest):
                 any(p.get("key") == "$browser" and p.get("value") == "Chrome" for p in filter_props),
                 "Breakdown property filter should be applied",
             )
-
     # =========================================================================
     # OFFSET-BASED PAGINATION
     # =========================================================================

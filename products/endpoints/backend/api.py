@@ -114,27 +114,39 @@ def _get_single_breakdown_property(breakdown_filter: dict) -> str | None:
     return None
 
 
-def _get_single_breakdown_info(breakdown_filter: dict) -> tuple[str, str] | None:
-    """Extract the breakdown property name and type from either legacy or new format.
+def _get_breakdown_properties(breakdown_filter: dict) -> list[str]:
+    """Extract all breakdown property names from either legacy or new format."""
+    breakdown = breakdown_filter.get("breakdown")
+    if breakdown:
+        return [breakdown]
+    breakdowns = breakdown_filter.get("breakdowns") or []
+    return [b.get("property") for b in breakdowns if b.get("property")]
 
-    Returns (property_name, property_type) or None if not found.
 
-    Legacy: {"breakdown": "$browser", "breakdown_type": "event"}
-    New:    {"breakdowns": [{"property": "$browser", "type": "event"}]}
+def _get_breakdown_column_indices(breakdown_filter: dict) -> dict[str, int]:
+    """Map breakdown property names to their 1-based index in the breakdown_value array.
+
+    Single breakdown: {"$browser": 0}  (0 means use the whole array, not an index)
+    Multiple breakdowns: {"$browser": 1, "$os": 2}
+    """
+    props = _get_breakdown_properties(breakdown_filter)
+    if len(props) <= 1:
+        return {props[0]: 0} if props else {}
+    return {prop: i + 1 for i, prop in enumerate(props)}
+
+
+def _get_breakdown_infos(breakdown_filter: dict) -> list[tuple[str, str]]:
+    """Extract all breakdown property name and type pairs.
+
+    Returns list of (property_name, property_type) tuples.
     """
     breakdown = breakdown_filter.get("breakdown")
     if breakdown:
         breakdown_type = breakdown_filter.get("breakdown_type", "event")
-        return (breakdown, breakdown_type)
+        return [(breakdown, breakdown_type)]
 
     breakdowns = breakdown_filter.get("breakdowns") or []
-    if len(breakdowns) == 1:
-        prop = breakdowns[0].get("property")
-        prop_type = breakdowns[0].get("type", "event")
-        if prop:
-            return (prop, prop_type)
-
-    return None
+    return [(b["property"], b.get("type", "event")) for b in breakdowns if b.get("property")]
 
 
 def _endpoint_refresh_mode_to_refresh_type(
@@ -1029,14 +1041,14 @@ class EndpointViewSet(TeamAndOrgViewSetMixin, PydanticModelMixin, viewsets.Model
                 if not request_var_codes.issubset(materialized_codes):
                     return False
             else:
-                # Materialized insight: only breakdown property allowed
+                # Materialized insight: only breakdown properties allowed
                 breakdown_filter = query.get("breakdownFilter") or {}
-                breakdown = _get_single_breakdown_property(breakdown_filter)
-                if not breakdown:
+                allowed_props = set(_get_breakdown_properties(breakdown_filter))
+                if not allowed_props:
                     return False
 
                 request_var_codes = set(data.variables.keys())
-                if not request_var_codes.issubset({breakdown}):
+                if not request_var_codes.issubset(allowed_props):
                     return False
 
         return True
@@ -1095,12 +1107,10 @@ class EndpointViewSet(TeamAndOrgViewSetMixin, PydanticModelMixin, viewsets.Model
         # Insight queries
         allowed: set[str] = set()
 
-        # Only allow breakdown property for query types that support it
+        # Only allow breakdown properties for query types that support it
         if query_kind in self.BREAKDOWN_SUPPORTED_QUERY_TYPES:
             breakdown_filter = query.get("breakdownFilter") or {}
-            breakdown = _get_single_breakdown_property(breakdown_filter)
-            if breakdown:
-                allowed.add(breakdown)
+            allowed.update(_get_breakdown_properties(breakdown_filter))
 
         if not is_materialized:
             # Non-materialized also allows date_from/date_to via filters_override
@@ -1120,11 +1130,10 @@ class EndpointViewSet(TeamAndOrgViewSetMixin, PydanticModelMixin, viewsets.Model
             materialized_vars = self._get_materialized_variables(version)
             return {v.code_name for v in materialized_vars}
 
-        # Insight queries: breakdown property is required if present
+        # Insight queries: all breakdown properties are required
         if query_kind in self.BREAKDOWN_SUPPORTED_QUERY_TYPES:
             breakdown_filter = query.get("breakdownFilter") or {}
-            prop = _get_single_breakdown_property(breakdown_filter)
-            return {prop} if prop else set()
+            return set(_get_breakdown_properties(breakdown_filter))
 
         return set()
 
@@ -1150,43 +1159,38 @@ class EndpointViewSet(TeamAndOrgViewSetMixin, PydanticModelMixin, viewsets.Model
         else:
             select_query.where = condition
 
-    def _build_breakdown_filter_condition(self, query_kind: str | None, value: str) -> ast.Expr | None:
+    def _build_breakdown_filter_condition(
+        self, query_kind: str | None, value: str, array_index: int = 0
+    ) -> ast.Expr | None:
         """Build the appropriate WHERE condition for breakdown filtering based on query type.
 
-        Different insight types store breakdowns in different columns:
-        - TrendsQuery, RetentionQuery: `breakdown_value` Array column
-        - FunnelsQuery: `final_prop` Array column
-        - LifecycleQuery, StickinessQuery, PathsQuery: No breakdown support
-
-        Both breakdown_value and final_prop are Array(Nullable(String)) columns,
-        so we use has() for array containment check.
+        array_index controls how to access the breakdown column:
+        - 0: single breakdown — use has() on the full array
+        - 1+: multiple breakdowns — use equality on breakdown_value[N]
         """
-        if query_kind == "FunnelsQuery":
-            return ast.Call(
-                name="has",
-                args=[ast.Field(chain=["final_prop"]), ast.Constant(value=value)],
-            )
-        elif query_kind in ("TrendsQuery", "RetentionQuery"):
-            return ast.Call(
-                name="has",
-                args=[ast.Field(chain=["breakdown_value"]), ast.Constant(value=value)],
-            )
-        elif query_kind in ("LifecycleQuery", "StickinessQuery", "PathsQuery"):
+        if query_kind in ("LifecycleQuery", "StickinessQuery", "PathsQuery"):
             logger.warning(
                 "Query type does not support breakdown filtering",
                 query_kind=query_kind,
             )
             return None
-        else:
-            logger.warning(
-                "Unknown query kind for breakdown filtering",
-                query_kind=query_kind,
-                falling_back_to="breakdown_value",
+
+        column_name = "final_prop" if query_kind == "FunnelsQuery" else "breakdown_value"
+
+        if array_index > 0:
+            return ast.CompareOperation(
+                left=ast.ArrayAccess(
+                    array=ast.Field(chain=[column_name]),
+                    property=ast.Constant(value=array_index),
+                ),
+                op=ast.CompareOperationOp.Eq,
+                right=ast.Constant(value=value),
             )
-            return ast.Call(
-                name="has",
-                args=[ast.Field(chain=["breakdown_value"]), ast.Constant(value=value)],
-            )
+
+        return ast.Call(
+            name="has",
+            args=[ast.Field(chain=[column_name]), ast.Constant(value=value)],
+        )
 
     def _execute_query_and_respond(
         self,
@@ -1347,18 +1351,20 @@ class EndpointViewSet(TeamAndOrgViewSetMixin, PydanticModelMixin, viewsets.Model
                                 value_wrapper_fns=mat_var.value_wrapper_fns,
                             )
                 else:
-                    # Insight: filter by breakdown property name
+                    # Insight: filter by breakdown property names
                     breakdown_filter = query.get("breakdownFilter") or {}
-                    breakdown_prop = _get_single_breakdown_property(breakdown_filter)  # e.g., "$browser"
+                    index_mapping = _get_breakdown_column_indices(breakdown_filter)
 
-                    if breakdown_prop and breakdown_prop in data.variables:
-                        value = data.variables[breakdown_prop]
-                        condition = self._build_breakdown_filter_condition(query_kind, value)
-                        if condition:
-                            if select_query.where:
-                                select_query.where = ast.And(exprs=[select_query.where, condition])
-                            else:
-                                select_query.where = condition
+                    for breakdown_prop, array_index in index_mapping.items():
+                        if breakdown_prop in data.variables:
+                            condition = self._build_breakdown_filter_condition(
+                                query_kind, data.variables[breakdown_prop], array_index=array_index
+                            )
+                            if condition:
+                                if select_query.where:
+                                    select_query.where = ast.And(exprs=[select_query.where, condition])
+                                else:
+                                    select_query.where = condition
 
             materialized_hogql_query = HogQLQuery(
                 query=select_query.to_hogql(),
@@ -1500,33 +1506,35 @@ class EndpointViewSet(TeamAndOrgViewSetMixin, PydanticModelMixin, viewsets.Model
             )
         return variables_override
 
-    def _variables_to_filters(self, variables: dict[str, str], breakdown_info: tuple[str, str] | None = None):
+    def _variables_to_filters(
+        self,
+        variables: dict[str, str],
+        breakdown_infos: builtins.list[tuple[str, str]] | None = None,
+    ):
         """Convert insight magic variables to DashboardFilter.
 
         Args:
             variables: Dict of variable name -> value from the request
-            breakdown_info: Tuple of (property_name, property_type) from breakdown filter
+            breakdown_infos: List of (property_name, property_type) for breakdown filtering
         """
         from posthog.schema import DashboardFilter, PropertyOperator
 
         date_from = variables.get("date_from")
         date_to = variables.get("date_to")
 
-        # Build properties filter for breakdown
         properties: list[dict] | None = None
-        if breakdown_info:
-            breakdown_prop, breakdown_type = breakdown_info
-            if breakdown_prop in variables:
-                breakdown_value = variables[breakdown_prop]
-                # Build filter dict - Pydantic will validate and convert to correct type
-                properties = [
+        for prop_name, prop_type in breakdown_infos or []:
+            if prop_name in variables:
+                if properties is None:
+                    properties = []
+                properties.append(
                     {
-                        "key": breakdown_prop,
-                        "value": breakdown_value,
-                        "type": breakdown_type if breakdown_type else "event",
+                        "key": prop_name,
+                        "value": variables[prop_name],
+                        "type": prop_type if prop_type else "event",
                         "operator": PropertyOperator.EXACT,
                     }
-                ]
+                )
 
         if not date_from and not date_to and not properties:
             return None
@@ -1568,8 +1576,8 @@ class EndpointViewSet(TeamAndOrgViewSetMixin, PydanticModelMixin, viewsets.Model
                     variables_override = self._parse_variables(query, data.variables)
                 else:
                     breakdown_filter = query.get("breakdownFilter") or {}
-                    breakdown_info = _get_single_breakdown_info(breakdown_filter)
-                    filters_override = self._variables_to_filters(data.variables, breakdown_info)
+                    breakdown_infos = _get_breakdown_infos(breakdown_filter)
+                    filters_override = self._variables_to_filters(data.variables, breakdown_infos=breakdown_infos)
 
             query_request_data = {
                 "client_query_id": data.client_query_id,
