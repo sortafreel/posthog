@@ -43,14 +43,4 @@ class Node(UUIDModel, CreatedMetaFields, UpdatedMetaFields):
                 name="saved_query_required_on_non_table_node_type",
                 check=Q(type=NodeType.TABLE) | Q(saved_query__isnull=False),
             ),
-            models.UniqueConstraint(
-                condition=models.Q(saved_query__isnull=False),
-                name="saved_query_unique_within_team_dag",
-                fields=["team", "dag_id", "saved_query"],
-            ),
-            models.UniqueConstraint(
-                condition=models.Q(saved_query__isnull=True),
-                name="name_unique_within_team_dag_for_tables",
-                fields=["team", "dag_id", "name"],
-            ),
         ]
