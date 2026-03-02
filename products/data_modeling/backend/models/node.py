@@ -17,7 +17,6 @@ class Node(UUIDModel, CreatedMetaFields, UpdatedMetaFields):
     team = models.ForeignKey(Team, on_delete=models.CASCADE)
     # models.PROTECT prevents deleting a saved query if its referenced by a Node
     saved_query = models.ForeignKey(DataWarehouseSavedQuery, on_delete=models.PROTECT, null=True, blank=True)
-    dag_id = models.TextField(max_length=256, default="posthog", db_index=True)
     # duplicate of dag_id, will replace it after code refs are migrated
     dag_id_text = models.TextField(max_length=256, default="posthog")
     # name of the source table, view, matview, etc.
@@ -33,7 +32,6 @@ class Node(UUIDModel, CreatedMetaFields, UpdatedMetaFields):
             self.name = self.saved_query.name
         elif not self.name:
             raise ValueError("Node without a saved_query must have a name")
-        self.dag_id = self.dag_id_text
         super().save(*args, **kwargs)
 
     class Meta:
