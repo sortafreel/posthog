@@ -40,6 +40,7 @@ from posthog.models.integration import (
     LinkedInAdsIntegration,
     OauthIntegration,
     SlackIntegration,
+    StripeIntegration,
     TwilioIntegration,
 )
 
@@ -199,6 +200,13 @@ class IntegrationSerializer(serializers.ModelSerializer):
                 )
             except NotImplementedError:
                 raise ValidationError("Kind not configured")
+
+            if validated_data["kind"] == "stripe":
+                try:
+                    stripe_integration = StripeIntegration(instance)
+                    stripe_integration.write_posthog_secrets(team_id, request.user)
+                except Exception as e:
+                    capture_exception(e)
 
             return instance
 
