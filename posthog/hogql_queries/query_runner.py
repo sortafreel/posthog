@@ -1278,7 +1278,7 @@ class QueryRunner(ABC, Generic[Q, R, CR]):
                 )
 
             if execution_mode == ExecutionMode.RECENT_CACHE_CALCULATE_BLOCKING_IF_STALE:
-                from posthog.hogql_queries.query_coalescing import QueryCoalescer
+                from posthog.hogql_queries.query_coalescer import QueryCoalescer
 
                 CachedResponse = self.cached_response_type
                 dry_run = not posthoganalytics.feature_enabled(

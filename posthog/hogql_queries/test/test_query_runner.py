@@ -449,7 +449,7 @@ class TestQueryCoalescing(BaseTest):
         Runner = self.setup_test_query_runner_class()
         runner = Runner(query={"some_attr": "bla"}, team=self.team)
 
-        with mock.patch("posthog.hogql_queries.query_coalescing.QueryCoalescer") as MockCoalescer:
+        with mock.patch("posthog.hogql_queries.query_coalescer.QueryCoalescer") as MockCoalescer:
             MockCoalescer.return_value.run_coalesced.side_effect = lambda execute, **_: execute()
             runner.run(execution_mode=ExecutionMode.RECENT_CACHE_CALCULATE_BLOCKING_IF_STALE)
 
@@ -461,7 +461,7 @@ class TestQueryCoalescing(BaseTest):
         Runner = self.setup_test_query_runner_class()
         runner = Runner(query={"some_attr": "bla"}, team=self.team)
 
-        with mock.patch("posthog.hogql_queries.query_coalescing.QueryCoalescer") as MockCoalescer:
+        with mock.patch("posthog.hogql_queries.query_coalescer.QueryCoalescer") as MockCoalescer:
             runner.run(execution_mode=ExecutionMode.CALCULATE_BLOCKING_ALWAYS)
 
         MockCoalescer.assert_not_called()
@@ -472,7 +472,7 @@ class TestQueryCoalescing(BaseTest):
         Runner = self.setup_test_query_runner_class()
         runner = Runner(query={"some_attr": "bla"}, team=self.team)
 
-        with mock.patch("posthog.hogql_queries.query_coalescing.QueryCoalescer") as MockCoalescer:
+        with mock.patch("posthog.hogql_queries.query_coalescer.QueryCoalescer") as MockCoalescer:
             MockCoalescer.return_value.run_coalesced.side_effect = lambda execute, **_: execute()
             runner.run(execution_mode=ExecutionMode.RECENT_CACHE_CALCULATE_BLOCKING_IF_STALE)
 
@@ -496,7 +496,7 @@ class TestQueryCoalescing(BaseTest):
             runner.run(execution_mode=ExecutionMode.RECENT_CACHE_CALCULATE_BLOCKING_IF_STALE)
 
         # Lock should be released, a second request should be able to acquire it
-        from posthog.hogql_queries.query_coalescing import QueryCoalescer
+        from posthog.hogql_queries.query_coalescer import QueryCoalescer
 
         runner2 = Runner(query={"some_attr": "bla"}, team=self.team)
         cache_key = runner2.get_cache_key()
@@ -516,7 +516,7 @@ class TestQueryCoalescing(BaseTest):
         with freeze_time(datetime(2023, 2, 4, 13, 48, 42)):
             follower_runner = Runner(query={"some_attr": "bla"}, team=self.team)
             with mock.patch(
-                "posthog.hogql_queries.query_coalescing.QueryCoalescer._try_acquire",
+                "posthog.hogql_queries.query_coalescer.QueryCoalescer._try_acquire",
                 return_value=False,
             ):
                 response = follower_runner.run(execution_mode=ExecutionMode.RECENT_CACHE_CALCULATE_BLOCKING_IF_STALE)
@@ -529,7 +529,7 @@ class TestQueryCoalescing(BaseTest):
         runner = Runner(query={"some_attr": "bla"}, team=self.team)
 
         with mock.patch(
-            "posthog.hogql_queries.query_coalescing.QueryCoalescer._try_acquire",
+            "posthog.hogql_queries.query_coalescer.QueryCoalescer._try_acquire",
             side_effect=RedisError("Redis connection refused"),
         ):
             response = runner.run(execution_mode=ExecutionMode.RECENT_CACHE_CALCULATE_BLOCKING_IF_STALE)
