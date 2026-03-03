@@ -118,8 +118,7 @@ const sourceFieldToElement = (
     }
 
     if (field.type === 'select') {
-        const visibleOptions = isUpdateMode ? field.options : field.options.filter((o) => !o.deprecated)
-        const hasOptionFields = !!visibleOptions.filter((n) => (n.fields?.length ?? 0) > 0).length
+        const hasOptionFields = !!field.options.filter((n) => (n.fields?.length ?? 0) > 0).length
 
         const getOptions = (value: any): JSX.Element[] | undefined =>
             field.options
@@ -137,7 +136,7 @@ const sourceFieldToElement = (
                 {({ value, onChange }) => (
                     <>
                         <LemonSelect
-                            options={visibleOptions}
+                            options={field.options}
                             value={
                                 (value === undefined || value === null ? lastValue?.[field.name] : value) ||
                                 field.defaultValue
