@@ -126,10 +126,11 @@ export function InsightVizDisplay({
         }
 
         if (activeView === InsightType.FUNNELS) {
-            if (!isFunnelWithEnoughSteps) {
+            const isFlowViz = funnelsFilter?.funnelVizType === FunnelVizType.Flow
+            if (!isFunnelWithEnoughSteps && !isFlowViz) {
                 return <FunnelSingleStepState actionable={!embedded && editMode} />
             }
-            if (!hasFunnelResults && !erroredQueryId && !insightDataLoading) {
+            if (!hasFunnelResults && !erroredQueryId && !insightDataLoading && !isFlowViz) {
                 return <InsightEmptyState heading={context?.emptyStateHeading} detail={context?.emptyStateDetail} />
             }
         }
