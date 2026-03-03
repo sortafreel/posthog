@@ -1,11 +1,12 @@
 from copy import deepcopy
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from enum import Enum
 from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
 from django.db.models import Case, Count, F, Prefetch, Q, QuerySet, Value, When
 from django.db.models.functions import Now
+from django.utils import timezone
 
 import pydantic
 from drf_spectacular.utils import extend_schema
@@ -223,6 +224,8 @@ class ExperimentSerializer(UserAccessControlSerializerMixin, serializers.ModelSe
         if not isinstance(value, list):
             raise ValidationError("Phases must be a list")
 
+        now = timezone.now()
+
         for i, phase in enumerate(value):
             if not isinstance(phase, dict):
                 raise ValidationError(f"Phase {i} must be an object")
@@ -235,12 +238,24 @@ class ExperimentSerializer(UserAccessControlSerializerMixin, serializers.ModelSe
             except (ValueError, TypeError):
                 raise ValidationError(f"Phase {i} has an invalid start_date")
 
+            if start.tzinfo is None:
+                start = start.replace(tzinfo=UTC)
+
+            if start > now:
+                raise ValidationError(f"Phase {i} start_date cannot be in the future")
+
             end = None
             if phase.get("end_date") is not None:
                 try:
                     end = datetime.fromisoformat(phase["end_date"])
                 except (ValueError, TypeError):
                     raise ValidationError(f"Phase {i} has an invalid end_date")
+
+                if end.tzinfo is None:
+                    end = end.replace(tzinfo=UTC)
+
+                if end > now:
+                    raise ValidationError(f"Phase {i} end_date cannot be in the future")
 
                 if end <= start:
                     raise ValidationError(f"Phase {i} end_date must be after start_date")
@@ -1093,6 +1108,12 @@ class EnterpriseExperimentsViewSet(
         except (ValueError, TypeError):
             raise ValidationError("phase_start_date must be a valid ISO 8601 date")
 
+        if parsed_start.tzinfo is None:
+            parsed_start = parsed_start.replace(tzinfo=UTC)
+
+        if parsed_start > timezone.now():
+            raise ValidationError("phase_start_date cannot be in the future")
+
         if parsed_start <= experiment.start_date:
             raise ValidationError("phase_start_date must be after the experiment start date")
 
@@ -1113,6 +1134,8 @@ class EnterpriseExperimentsViewSet(
         else:
             last_phase = phases[-1]
             last_start = datetime.fromisoformat(last_phase["start_date"])
+            if last_start.tzinfo is None:
+                last_start = last_start.replace(tzinfo=UTC)
             if parsed_start <= last_start:
                 raise ValidationError("phase_start_date must be after the last phase's start_date")
             last_phase["end_date"] = phase_start_date
