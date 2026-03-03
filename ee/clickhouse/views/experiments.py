@@ -93,6 +93,7 @@ class ExperimentSerializer(UserAccessControlSerializerMixin, serializers.ModelSe
             "metrics_secondary",
             "stats_config",
             "scheduling_config",
+            "phases",
             "_create_in_folder",
             "conclusion",
             "conclusion_comment",
@@ -212,6 +213,51 @@ class ExperimentSerializer(UserAccessControlSerializerMixin, serializers.ModelSe
                 )
             if "control" not in [variant["key"] for variant in variants]:
                 raise ValidationError("Feature flag variants must contain a control variant")
+
+        return value
+
+    def validate_phases(self, value):
+        if value is None or value == []:
+            return value
+
+        if not isinstance(value, list):
+            raise ValidationError("Phases must be a list")
+
+        for i, phase in enumerate(value):
+            if not isinstance(phase, dict):
+                raise ValidationError(f"Phase {i} must be an object")
+
+            if "start_date" not in phase:
+                raise ValidationError(f"Phase {i} must have a start_date")
+
+            try:
+                start = datetime.fromisoformat(phase["start_date"])
+            except (ValueError, TypeError):
+                raise ValidationError(f"Phase {i} has an invalid start_date")
+
+            end = None
+            if phase.get("end_date") is not None:
+                try:
+                    end = datetime.fromisoformat(phase["end_date"])
+                except (ValueError, TypeError):
+                    raise ValidationError(f"Phase {i} has an invalid end_date")
+
+                if end <= start:
+                    raise ValidationError(f"Phase {i} end_date must be after start_date")
+
+            # Only the last phase may have a null end_date
+            if phase.get("end_date") is None and i < len(value) - 1:
+                raise ValidationError(f"Phase {i} must have an end_date (only the last phase can be open)")
+
+            # Check contiguity: each phase's start_date == previous phase's end_date
+            if i > 0:
+                prev_end = value[i - 1].get("end_date")
+                if prev_end is None:
+                    raise ValidationError(f"Phase {i - 1} must have an end_date before another phase can follow")
+                if phase["start_date"] != prev_end:
+                    raise ValidationError(
+                        f"Phase {i} start_date must equal Phase {i - 1} end_date (phases must be contiguous)"
+                    )
 
         return value
 
@@ -407,6 +453,7 @@ class ExperimentSerializer(UserAccessControlSerializerMixin, serializers.ModelSe
             "metrics_secondary",
             "stats_config",
             "scheduling_config",
+            "phases",
             "conclusion",
             "conclusion_comment",
             "primary_metrics_ordered_uuids",
@@ -1026,6 +1073,67 @@ class EnterpriseExperimentsViewSet(
         experiment.exposure_cohort = cohort
         experiment.save(update_fields=["exposure_cohort"])
         return Response({"cohort": cohort_serializer.data}, status=201)
+
+    @action(methods=["POST"], detail=True, required_scopes=["experiment:write"])
+    def add_phase(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        experiment: Experiment = self.get_object()
+
+        if not experiment.start_date:
+            raise ValidationError("Cannot add phases to a draft experiment")
+
+        if experiment.end_date:
+            raise ValidationError("Cannot add phases to a completed experiment")
+
+        phase_start_date = request.data.get("phase_start_date")
+        if not phase_start_date:
+            raise ValidationError("phase_start_date is required")
+
+        try:
+            parsed_start = datetime.fromisoformat(phase_start_date)
+        except (ValueError, TypeError):
+            raise ValidationError("phase_start_date must be a valid ISO 8601 date")
+
+        if parsed_start <= experiment.start_date:
+            raise ValidationError("phase_start_date must be after the experiment start date")
+
+        name = request.data.get("name")
+        reason = request.data.get("reason")
+
+        phases = list(experiment.phases or [])
+
+        if not phases:
+            # Synthesize the first phase from experiment start to the new phase boundary
+            phases.append(
+                {
+                    "start_date": experiment.start_date.isoformat(),
+                    "end_date": phase_start_date,
+                    "name": "Phase 1",
+                }
+            )
+        else:
+            last_phase = phases[-1]
+            last_start = datetime.fromisoformat(last_phase["start_date"])
+            if parsed_start <= last_start:
+                raise ValidationError("phase_start_date must be after the last phase's start_date")
+            last_phase["end_date"] = phase_start_date
+
+        new_phase: dict[str, Any] = {
+            "start_date": phase_start_date,
+            "end_date": None,
+        }
+        if name:
+            new_phase["name"] = name
+        if reason:
+            new_phase["reason"] = reason
+
+        phases.append(new_phase)
+        experiment.phases = phases
+        experiment.save(update_fields=["phases"])
+
+        return Response(
+            ExperimentSerializer(experiment, context=self.get_serializer_context()).data,
+            status=200,
+        )
 
     @action(methods=["GET"], detail=False, required_scopes=["feature_flag:read"])
     def eligible_feature_flags(self, request: Request, **kwargs: Any) -> Response:
