@@ -5,7 +5,7 @@ from django.db import migrations
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("data_modeling", "0010_remove_edge_unique_within_dag_and_more"),
+        ("data_modeling", "0011_remove_edge_unique_within_dag"),
     ]
 
     operations = [
