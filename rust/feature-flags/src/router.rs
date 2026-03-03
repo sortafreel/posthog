@@ -430,6 +430,7 @@ mod tests {
             non_persons_writer: invalid_pool.clone(),
             persons_reader: invalid_pool.clone(),
             persons_writer: invalid_pool,
+            behavioral_cohorts_reader: None,
             test_before_acquire: false,
         });
 
@@ -452,6 +453,7 @@ mod tests {
             non_persons_writer: shared_pool.clone(),
             persons_reader: shared_pool.clone(),
             persons_writer: shared_pool,
+            behavioral_cohorts_reader: None,
             test_before_acquire: false,
         });
 
