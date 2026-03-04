@@ -6,7 +6,7 @@ from rest_framework.request import Request
 
 from posthog.models.oauth import find_oauth_access_token
 
-from .views import STRIPE_APP_NAME
+from . import STRIPE_APP_NAME
 
 
 class StripeProvisioningBearerAuthentication(BaseAuthentication):

@@ -1,10 +1,13 @@
 import secrets
 from datetime import timedelta
+from typing import Any
+from urllib.parse import urlencode
 
 from django.conf import settings
 from django.core.cache import cache
 from django.db import IntegrityError
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 
 import structlog
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
@@ -12,13 +15,15 @@ from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.request import Request
 from rest_framework.response import Response
 
+from posthog.exceptions_capture import capture_exception
 from posthog.models.integration import StripeIntegration
 from posthog.models.oauth import OAuthAccessToken, OAuthRefreshToken, find_oauth_refresh_token
 from posthog.models.team.team import Team
 from posthog.models.user import User
 from posthog.models.utils import generate_random_oauth_access_token, generate_random_oauth_refresh_token
 
-from . import AUTH_CODE_CACHE_PREFIX
+from . import AUTH_CODE_CACHE_PREFIX, STRIPE_APP_NAME
+from .authentication import StripeProvisioningBearerAuthentication
 from .region_proxy import stripe_region_proxy
 from .signature import SUPPORTED_VERSIONS, verify_stripe_signature
 
@@ -27,8 +32,6 @@ logger = structlog.get_logger(__name__)
 AUTH_CODE_TTL_SECONDS = 300
 DEEP_LINK_TTL_SECONDS = 600
 DEEP_LINK_CACHE_PREFIX = "stripe_app_deep_link:"
-
-STRIPE_APP_NAME = "PostHog Stripe App"
 
 
 # ---------------------------------------------------------------------------
@@ -100,8 +103,6 @@ def account_requests(request: Request) -> Response:
     orchestrator = data.get("orchestrator") or {}
 
     if expires_at_str:
-        from django.utils.dateparse import parse_datetime
-
         expires_at = parse_datetime(expires_at_str)
         if expires_at and expires_at < timezone.now():
             return Response(
@@ -118,8 +119,10 @@ def account_requests(request: Request) -> Response:
     existing_user = User.objects.filter(email=email).first()
 
     if existing_user:
+        logger.info("stripe_app.account_request.existing_user", email=email)
         return _handle_existing_user(request_id, existing_user, confirmation_secret, scopes)
 
+    logger.info("stripe_app.account_request.new_user", email=email, region=region)
     return _handle_new_user(request_id, data, email, scopes, stripe_account_id, region)
 
 
@@ -193,12 +196,15 @@ def _handle_new_user(
 
 def _build_authorize_url(confirmation_secret: str, scopes: list[str]) -> str:
     base = settings.SITE_URL.rstrip("/")
-    scope_str = " ".join(scopes)
     oauth_app = _get_stripe_oauth_app()
     client_id = oauth_app.client_id if oauth_app else ""
-    return (
-        f"{base}/oauth/authorize?response_type=code&client_id={client_id}&state={confirmation_secret}&scope={scope_str}"
-    )
+    params = {
+        "response_type": "code",
+        "client_id": client_id,
+        "state": confirmation_secret,
+        "scope": " ".join(scopes),
+    }
+    return f"{base}/oauth/authorize?{urlencode(params)}"
 
 
 # ---------------------------------------------------------------------------
@@ -236,7 +242,11 @@ def _exchange_authorization_code(request: Request) -> Response:
             {"error": "invalid_grant", "error_description": "Invalid or expired authorization code"}, status=400
         )
 
-    cache.delete(cache_key)
+    # Delete atomically — if another request already consumed it, treat as invalid
+    if not cache.delete(cache_key):
+        return Response(
+            {"error": "invalid_grant", "error_description": "Invalid or expired authorization code"}, status=400
+        )
 
     user_id = code_data["user_id"]
     team_id = code_data["team_id"]
@@ -245,6 +255,8 @@ def _exchange_authorization_code(request: Request) -> Response:
     try:
         user = User.objects.get(id=user_id)
     except User.DoesNotExist:
+        logger.warning("stripe_app.token_exchange.user_not_found", user_id=user_id)
+        capture_exception(Exception("Stripe APP token exchange: user not found"))
         return Response({"error": "invalid_grant", "error_description": "User not found"}, status=400)
 
     oauth_app = _get_stripe_oauth_app()
@@ -270,6 +282,7 @@ def _exchange_authorization_code(request: Request) -> Response:
     )
 
     account_id = str(code_data.get("org_id", ""))
+    logger.info("stripe_app.token_exchange.success", user_id=user_id, team_id=team_id)
 
     return Response(
         {
@@ -326,6 +339,8 @@ def _exchange_refresh_token(request: Request) -> Response:
         scoped_teams=scoped_teams,
     )
 
+    logger.info("stripe_app.token_refresh.success", user_id=user.id)
+
     return Response(
         {
             "token_type": "bearer",
@@ -345,13 +360,13 @@ def _exchange_refresh_token(request: Request) -> Response:
 @authentication_classes([])
 @permission_classes([])
 def provisioning_resources_create(request: Request) -> Response:
-    auth_error, user, access_token = _authenticate_bearer(request)
-    if auth_error:
-        return auth_error
-
     error = verify_stripe_signature(request)
     if error:
         return error
+
+    auth_error, user, access_token = _authenticate_bearer(request)
+    if auth_error:
+        return auth_error
 
     scoped_teams = access_token.scoped_teams or []
 
@@ -369,13 +384,14 @@ def provisioning_resources_create(request: Request) -> Response:
     try:
         team = Team.objects.get(id=team_id)
     except Team.DoesNotExist:
+        logger.warning("stripe_app.resource_create.team_not_found", team_id=team_id)
+        capture_exception(Exception("Stripe APP resource create: team not found"))
         return Response(
             {"status": "error", "id": str(team_id), "error": {"code": "team_not_found", "message": "Team not found"}},
             status=404,
         )
 
-    region = get_instance_region() or "US"
-    host = _region_to_host(region)
+    host = _get_instance_host()
 
     return Response(
         {
@@ -400,13 +416,13 @@ def provisioning_resources_create(request: Request) -> Response:
 @authentication_classes([])
 @permission_classes([])
 def provisioning_resource_detail(request: Request, resource_id: str) -> Response:
-    auth_error, user, access_token = _authenticate_bearer(request)
-    if auth_error:
-        return auth_error
-
     error = verify_stripe_signature(request)
     if error:
         return error
+
+    auth_error, user, access_token = _authenticate_bearer(request)
+    if auth_error:
+        return auth_error
 
     scoped_teams = access_token.scoped_teams or []
 
@@ -440,8 +456,7 @@ def provisioning_resource_detail(request: Request, resource_id: str) -> Response
             status=404,
         )
 
-    region = get_instance_region() or "US"
-    host = _region_to_host(region)
+    host = _get_instance_host()
 
     return Response(
         {
@@ -466,21 +481,20 @@ def provisioning_resource_detail(request: Request, resource_id: str) -> Response
 @authentication_classes([])
 @permission_classes([])
 def deep_links(request: Request) -> Response:
-    auth_error, user, access_token = _authenticate_bearer(request)
-    if auth_error:
-        return auth_error
-
     error = verify_stripe_signature(request)
     if error:
         return error
+
+    auth_error, user, access_token = _authenticate_bearer(request)
+    if auth_error:
+        return auth_error
 
     purpose = request.data.get("purpose", "dashboard")
 
     scoped_teams = access_token.scoped_teams or []
     team_id = scoped_teams[0] if scoped_teams else None
 
-    region = get_instance_region() or "US"
-    host = _region_to_host(region)
+    host = _get_instance_host()
 
     token = secrets.token_urlsafe(32)
     cache_key = f"{DEEP_LINK_CACHE_PREFIX}{token}"
@@ -513,10 +527,7 @@ def deep_links(request: Request) -> Response:
 # ---------------------------------------------------------------------------
 
 
-def _authenticate_bearer(request: Request) -> tuple[Response | None, any, any]:
-    """Authenticate via Bearer token. Returns (error_response, user, access_token)."""
-    from .authentication import StripeProvisioningBearerAuthentication
-
+def _authenticate_bearer(request: Request) -> tuple[Response | None, Any, Any]:
     auth = StripeProvisioningBearerAuthentication()
     try:
         result = auth.authenticate(request)
@@ -549,21 +560,25 @@ def _get_stripe_oauth_app():
                 client_id=settings.STRIPE_POSTHOG_OAUTH_CLIENT_ID,
             )
 
-    existing = OAuthApplication.objects.filter(name=STRIPE_APP_NAME).first()
-    if existing:
-        return existing
-
     from oauthlib.common import generate_token
 
-    return OAuthApplication.objects.create(
+    app, _created = OAuthApplication.objects.get_or_create(
         name=STRIPE_APP_NAME,
-        client_id=generate_token(),
-        client_secret="",
-        client_type=OAuthApplication.CLIENT_CONFIDENTIAL,
-        authorization_grant_type=OAuthApplication.GRANT_AUTHORIZATION_CODE,
-        redirect_uris="https://localhost",
-        algorithm="RS256",
+        defaults={
+            "client_id": generate_token(),
+            "client_secret": "",
+            "client_type": OAuthApplication.CLIENT_CONFIDENTIAL,
+            "authorization_grant_type": OAuthApplication.GRANT_AUTHORIZATION_CODE,
+            "redirect_uris": "https://localhost",
+            "algorithm": "RS256",
+        },
     )
+    return app
+
+
+def _get_instance_host() -> str:
+    region = get_instance_region() or "US"
+    return _region_to_host(region)
 
 
 def _region_to_host(region: str) -> str:

@@ -120,3 +120,26 @@ class TestOAuthTokenExchange(StripeProvisioningTestBase):
             HTTP_API_VERSION="0.1d",
         )
         assert res.status_code == 401
+
+    def test_missing_refresh_token_field_returns_400(self):
+        body = urlencode({"grant_type": "refresh_token"}).encode()
+        res = self._post_token(body)
+        assert res.status_code == 400
+        assert res.json()["error"] == "invalid_request"
+
+    def test_user_deleted_between_code_and_exchange_returns_400(self):
+        self._store_auth_code("orphan_code")
+        from posthog.models.user import User
+
+        cache_key = f"{AUTH_CODE_CACHE_PREFIX}orphan_code"
+        code_data = cache.get(cache_key)
+        temp_user = User.objects.create_user(email="temp@example.com", password="pass", first_name="Temp")
+        temp_id = temp_user.id
+        temp_user.delete()
+        code_data["user_id"] = temp_id
+        cache.set(cache_key, code_data, timeout=300)
+
+        body = self._token_request_body(code="orphan_code")
+        res = self._post_token(body)
+        assert res.status_code == 400
+        assert res.json()["error"] == "invalid_grant"

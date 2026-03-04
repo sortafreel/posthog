@@ -55,7 +55,7 @@ def verify_stripe_signature(request: Request) -> Response | None:
             status=401,
         )
 
-    body = request.body if hasattr(request, "body") else b""
+    body = request.body
     expected_hex = _compute_hmac(secret, timestamp_str, body)
 
     if not hmac.compare_digest(expected_hex.lower(), signature_hex.lower()):
@@ -78,12 +78,12 @@ def _compute_hmac(secret: str, timestamp_str: str, body: bytes) -> str:
     return mac.digest().hex()
 
 
-_SIG_RE = re.compile(r"t=(\d+),v1=([0-9a-fA-F]{64})")
+_SIG_RE = re.compile(r"^t=(\d{1,12}),v1=([0-9a-fA-F]{64})$")
 
 
 def _parse_signature_header(header: str) -> tuple[str, str] | None:
     """Parse 't=<timestamp>,v1=<hex>' into (timestamp_str, hex). Returns None on failure."""
-    m = _SIG_RE.search(header)
+    m = _SIG_RE.fullmatch(header)
     if not m:
         return None
     return m.group(1), m.group(2)
