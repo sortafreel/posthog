@@ -87,7 +87,7 @@ class TestCreateNotebookTool(BaseTest):
             title="Original Notebook",
             content="# Original",
         )
-        original_artifact_id = create_artifact.messages[1].content.split("artifact_id: ")[1].rstrip(".")
+        original_artifact_id = create_artifact.messages[1].content.split("artifact_id: ")[1].split(".")[0]
 
         update_result, update_artifact = async_to_sync(self.tool._arun_impl)(
             title="Updated Notebook",
