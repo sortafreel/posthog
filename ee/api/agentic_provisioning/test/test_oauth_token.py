@@ -2,14 +2,12 @@ import time
 from urllib.parse import urlencode
 
 from django.core.cache import cache
-from django.test import override_settings
 
 from ee.api.agentic_provisioning import AUTH_CODE_CACHE_PREFIX
 from ee.api.agentic_provisioning.signature import compute_signature
 from ee.api.agentic_provisioning.test.base import HMAC_SECRET, StripeProvisioningTestBase
 
 
-@override_settings(STRIPE_APP_SECRET_KEY=HMAC_SECRET)
 class TestOAuthTokenExchange(StripeProvisioningTestBase):
     def _store_auth_code(self, code: str = "test_code", **overrides):
         data = {
@@ -126,6 +124,26 @@ class TestOAuthTokenExchange(StripeProvisioningTestBase):
         res = self._post_token(body)
         assert res.status_code == 400
         assert res.json()["error"] == "invalid_request"
+
+    def test_refresh_token_when_access_token_already_deleted(self):
+        self._store_auth_code("code_for_null_access")
+        body = self._token_request_body(code="code_for_null_access")
+        first_res = self._post_token(body)
+        refresh_token = first_res.json()["refresh_token"]
+
+        from posthog.models.oauth import OAuthRefreshToken
+
+        rt = OAuthRefreshToken.objects.get(token=refresh_token)
+        if rt.access_token:
+            rt.access_token.delete()
+            rt.refresh_from_db()
+
+        refresh_body = urlencode({"grant_type": "refresh_token", "refresh_token": refresh_token}).encode()
+        res = self._post_token(refresh_body)
+        assert res.status_code == 200
+        data = res.json()
+        assert data["access_token"].startswith("pha_")
+        assert data["refresh_token"].startswith("phr_")
 
     def test_user_deleted_between_code_and_exchange_returns_400(self):
         self._store_auth_code("orphan_code")

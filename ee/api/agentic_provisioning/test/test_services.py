@@ -1,9 +1,6 @@
-from django.test import override_settings
-
-from ee.api.agentic_provisioning.test.base import HMAC_SECRET, StripeProvisioningTestBase
+from ee.api.agentic_provisioning.test.base import StripeProvisioningTestBase
 
 
-@override_settings(STRIPE_APP_SECRET_KEY=HMAC_SECRET)
 class TestProvisioningServices(StripeProvisioningTestBase):
     def test_returns_service_catalog(self):
         res = self._get_signed("/api/agentic/provisioning/services")

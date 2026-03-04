@@ -2,14 +2,12 @@ import time
 from datetime import timedelta
 from urllib.parse import urlencode
 
-from django.test import override_settings
 from django.utils import timezone
 
 from ee.api.agentic_provisioning.signature import compute_signature
 from ee.api.agentic_provisioning.test.base import HMAC_SECRET, StripeProvisioningTestBase
 
 
-@override_settings(STRIPE_APP_SECRET_KEY=HMAC_SECRET)
 class TestE2EProvisioningFlow(StripeProvisioningTestBase):
     """Walk through the full APP 0.1d provisioning flow end-to-end."""
 

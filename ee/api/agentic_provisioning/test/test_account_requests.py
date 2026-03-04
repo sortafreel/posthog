@@ -1,19 +1,16 @@
 from datetime import timedelta
-
 from unittest.mock import patch
 
 from django.db import IntegrityError
 from django.test import override_settings
 from django.utils import timezone
-
 from rest_framework.response import Response
 
 from posthog.models.user import User
 
-from ee.api.agentic_provisioning.test.base import HMAC_SECRET, StripeProvisioningTestBase
+from ee.api.agentic_provisioning.test.base import StripeProvisioningTestBase
 
 
-@override_settings(STRIPE_APP_SECRET_KEY=HMAC_SECRET)
 class TestAccountRequests(StripeProvisioningTestBase):
     def _account_request_payload(self, **overrides):
         payload = {

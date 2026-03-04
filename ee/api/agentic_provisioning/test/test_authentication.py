@@ -1,6 +1,5 @@
 from datetime import timedelta
 
-from django.test import override_settings
 from django.utils import timezone
 
 from posthog.models.oauth import OAuthAccessToken, OAuthApplication
@@ -9,7 +8,6 @@ from posthog.models.utils import generate_random_oauth_access_token
 from ee.api.agentic_provisioning.test.base import HMAC_SECRET, StripeProvisioningTestBase
 
 
-@override_settings(STRIPE_APP_SECRET_KEY=HMAC_SECRET)
 class TestBearerAuthentication(StripeProvisioningTestBase):
     def test_expired_token_returns_401(self):
         token = self._get_bearer_token()

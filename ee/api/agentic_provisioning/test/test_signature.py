@@ -18,6 +18,8 @@ class TestParseSignatureHeader(TestCase):
             ("empty", "", None),
             ("short_hex", "t=1234567890,v1=abcd", None),
             ("non_numeric_timestamp", f"t=notanumber,v1={'ab' * 32}", None),
+            ("extra_fields_ignored", f"t=1234567890,v1={'ab' * 32},v2={'cd' * 32}", ("1234567890", "ab" * 32)),
+            ("reversed_order", f"v1={'ab' * 32},t=1234567890", ("1234567890", "ab" * 32)),
         ]
     )
     def test_parse(self, _name, header, expected):
