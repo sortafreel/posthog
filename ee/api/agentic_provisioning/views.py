@@ -389,6 +389,7 @@ def provisioning_resources_create(request: Request) -> Response:
     auth_error, user, access_token = _authenticate_bearer(request)
     if auth_error:
         return auth_error
+    assert access_token is not None
 
     scoped_teams = access_token.scoped_teams or []
 
@@ -445,6 +446,7 @@ def provisioning_resource_detail(request: Request, resource_id: str) -> Response
     auth_error, user, access_token = _authenticate_bearer(request)
     if auth_error:
         return auth_error
+    assert access_token is not None
 
     scoped_teams = access_token.scoped_teams or []
 
@@ -512,6 +514,7 @@ def deep_links(request: Request) -> Response:
     auth_error, user, access_token = _authenticate_bearer(request)
     if auth_error:
         return auth_error
+    assert access_token is not None
 
     purpose = request.data.get("purpose", "dashboard")
 
