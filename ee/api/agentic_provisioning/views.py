@@ -286,7 +286,7 @@ def _exchange_authorization_code(request: Request) -> Response:
         application=oauth_app,
         token=access_token_value,
         user=user,
-        expires=timezone.now() + timedelta(days=365),
+        expires=timezone.now() + timedelta(seconds=ACCESS_TOKEN_EXPIRY_SECONDS),
         scope=scope_str,
         scoped_teams=[team_id],
     )
@@ -347,7 +347,7 @@ def _exchange_refresh_token(request: Request) -> Response:
         application=oauth_app,
         token=new_access_value,
         user=user,
-        expires=timezone.now() + timedelta(days=365),
+        expires=timezone.now() + timedelta(seconds=ACCESS_TOKEN_EXPIRY_SECONDS),
         scope=old_scope,
         scoped_teams=scoped_teams,
     )
