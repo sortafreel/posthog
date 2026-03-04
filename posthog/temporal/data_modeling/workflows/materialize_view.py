@@ -13,6 +13,8 @@ from posthog.exceptions_capture import capture_exception
 from posthog.temporal.common.base import PostHogWorkflow
 from posthog.temporal.data_modeling.activities import (
     CreateDataModelingJobInputs,
+    DuckgresShadowInputs,
+    DuckgresShadowResult,
     FailMaterializationInputs,
     MaterializeViewInputs,
     PrepareQueryableTableInputs,
@@ -20,8 +22,15 @@ from posthog.temporal.data_modeling.activities import (
     create_data_modeling_job_activity,
     fail_materialization_activity,
     materialize_view_activity,
+    materialize_view_duckgres_activity,
     prepare_queryable_table_activity,
     succeed_materialization_activity,
+)
+from posthog.temporal.data_modeling.metrics import (
+    get_clickhouse_materialization_duration_metric,
+    get_duckgres_shadow_duration_metric,
+    get_duckgres_shadow_finished_metric,
+    get_duckgres_shadow_row_count_match_metric,
 )
 from posthog.temporal.ducklake.types import DataModelingDuckLakeCopyInputs, DuckLakeCopyModelInput
 
@@ -109,6 +118,22 @@ class MaterializeViewWorkflow(PostHogWorkflow):
             ),
             start_to_close_timeout=dt.timedelta(minutes=1),
         )
+
+        # fire-and-forget: start duckgres shadow materialization in parallel
+        duckgres_shadow_handle = temporalio.workflow.start_activity(
+            materialize_view_duckgres_activity,
+            DuckgresShadowInputs(
+                team_id=inputs.team_id,
+                node_id=inputs.node_id,
+                dag_id=inputs.dag_id,
+                job_id=job_id,
+            ),
+            start_to_close_timeout=dt.timedelta(minutes=15),
+            retry_policy=temporalio.common.RetryPolicy(
+                maximum_attempts=1,
+            ),
+        )
+
         try:
             materialize_result = await temporalio.workflow.execute_activity(
                 materialize_view_activity,
@@ -127,6 +152,7 @@ class MaterializeViewWorkflow(PostHogWorkflow):
                     maximum_interval=dt.timedelta(minutes=5),
                     non_retryable_error_types=NON_RETRYABLE_ERRORS,
                 ),
+                cancellation_type=temporalio.workflow.ActivityCancellationType.TRY_CANCEL,
             )
 
             # prepare files for querying and create DataWarehouseTable
@@ -189,6 +215,15 @@ class MaterializeViewWorkflow(PostHogWorkflow):
                     maximum_attempts=3,
                 ),
             )
+
+            # after the main workflow succeeds, collect shadow stats for comparison
+            await self._collect_shadow_comparison(
+                duckgres_shadow_handle,
+                materialize_result.row_count,
+                duration_seconds,
+                inputs,
+            )
+
             temporalio.workflow.logger.info(
                 "MaterializeViewWorkflow completed successfully",
                 extra={
@@ -205,14 +240,20 @@ class MaterializeViewWorkflow(PostHogWorkflow):
             )
         except Exception as e:
             # handle failure
-            if isinstance(e, temporalio.exceptions.ActivityError):
+            cancelled = isinstance(e, temporalio.exceptions.ActivityError) and isinstance(
+                e.cause, temporalio.exceptions.CancelledError
+            )
+            if cancelled:
+                error_message = "Workflow was cancelled"
+            elif isinstance(e, temporalio.exceptions.ActivityError):
                 error_message = str(e.cause) if e.cause else str(e)
-                temporal_error_log = f"MaterializeViewWorkflow failed with ActivityError: {error_message}"
             else:
                 capture_exception(e)
                 error_message = str(e)
-                temporal_error_log = f"MaterializeViewWorkflow failed with unexpected error: {error_message}"
-            temporalio.workflow.logger.error(temporal_error_log, extra=inputs.properties_to_log)
+            temporalio.workflow.logger.error(
+                f"MaterializeViewWorkflow failed: {error_message}",
+                extra=inputs.properties_to_log,
+            )
             try:
                 await temporalio.workflow.execute_activity(
                     fail_materialization_activity,
@@ -222,6 +263,7 @@ class MaterializeViewWorkflow(PostHogWorkflow):
                         dag_id=inputs.dag_id,
                         job_id=job_id,
                         error=error_message,
+                        cancelled=cancelled,
                     ),
                     start_to_close_timeout=dt.timedelta(minutes=5),
                     retry_policy=temporalio.common.RetryPolicy(
@@ -234,3 +276,52 @@ class MaterializeViewWorkflow(PostHogWorkflow):
                     extra=inputs.properties_to_log,
                 )
             raise
+
+    async def _collect_shadow_comparison(
+        self,
+        shadow_handle: temporalio.workflow.ActivityHandle[DuckgresShadowResult],
+        clickhouse_row_count: int,
+        clickhouse_duration_seconds: float,
+        inputs: MaterializeViewWorkflowInputs,
+    ) -> None:
+        """Await the duckgres shadow activity and emit comparison metrics.
+
+        This is best-effort — any failure is swallowed so it never affects the workflow result.
+        """
+        try:
+            shadow_result: DuckgresShadowResult = await shadow_handle
+            if shadow_result.error == "disabled":
+                return
+
+            row_count_matched = clickhouse_row_count == shadow_result.row_count
+            status = "completed" if shadow_result.error is None else "failed"
+
+            # prometheus metrics
+            get_duckgres_shadow_finished_metric(status).add(1)
+            get_clickhouse_materialization_duration_metric().record(clickhouse_duration_seconds)
+            if shadow_result.error is None:
+                get_duckgres_shadow_duration_metric().record(shadow_result.duration_seconds)
+                get_duckgres_shadow_row_count_match_metric(row_count_matched).add(1)
+
+            # structured log for detailed comparison
+            temporalio.workflow.logger.info(
+                "duckgres_shadow_comparison",
+                extra={
+                    "clickhouse_rows": clickhouse_row_count,
+                    "clickhouse_duration_seconds": round(clickhouse_duration_seconds, 2),
+                    "duckgres_rows": shadow_result.row_count,
+                    "duckgres_duration_seconds": round(shadow_result.duration_seconds, 2),
+                    "duckgres_schema": shadow_result.schema_name,
+                    "duckgres_table": shadow_result.table_name,
+                    "duckgres_error": shadow_result.error,
+                    "row_count_match": row_count_matched,
+                    **inputs.properties_to_log,
+                },
+            )
+        except Exception as shadow_err:
+            get_duckgres_shadow_finished_metric("error").add(1)
+            temporalio.workflow.logger.warning(
+                f"Duckgres shadow comparison failed: {str(shadow_err)}",
+                extra=inputs.properties_to_log,
+            )
+            capture_exception(shadow_err)
