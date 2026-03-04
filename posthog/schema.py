@@ -2821,6 +2821,15 @@ class MaxExperimentVariantResultFrequentist(BaseModel):
     significant: bool
 
 
+class MaxNotebookContext(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    id: str
+    name: str | None = None
+    type: Literal["notebook"] = "notebook"
+
+
 class MaxProductInfo(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
@@ -19310,6 +19319,7 @@ class MaxUIContext(BaseModel):
     events: list[MaxEventContext] | None = None
     form_answers: dict[str, str] | None = None
     insights: list[MaxInsightContext] | None = None
+    notebooks: list[MaxNotebookContext] | None = None
 
 
 class QueryRequest(BaseModel):
