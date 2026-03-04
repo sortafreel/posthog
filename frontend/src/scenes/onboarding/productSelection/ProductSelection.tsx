@@ -49,7 +49,6 @@ import {
     MailHog,
     MicrophoneHog,
     RobotHog,
-    WavingHog,
 } from 'lib/components/hedgehogs'
 import { useFeatureFlag } from 'lib/hooks/useFeatureFlag'
 import { getFeatureFlagPayload } from 'lib/logic/featureFlagLogic'
@@ -265,7 +264,7 @@ const PRODUCT_HEDGEHOG: Partial<Record<string, React.ComponentType<{ className?:
     [ProductKey.PRODUCT_ANALYTICS]: GraphsHog,
     [ProductKey.WEB_ANALYTICS]: ExplorerHog,
     [ProductKey.SESSION_REPLAY]: FilmCameraHog,
-    [ProductKey.LLM_OBSERVABILITY]: RobotHog,
+    [ProductKey.LLM_ANALYTICS]: RobotHog,
     [ProductKey.DATA_WAREHOUSE]: BuilderHog1,
     [ProductKey.FEATURE_FLAGS]: FeatureFlagHog,
     [ProductKey.EXPERIMENTS]: ExperimentsHog,
@@ -464,58 +463,56 @@ function SimplifiedProductSelection(): JSX.Element {
 
     const allProducts = Object.keys(availableOnboardingProducts) as AvailableOnboardingProductKey[]
 
-    // Start with no selection unless browsing history suggests one — forces users to explore
+    // Pre-select: browsing history suggestion if available, otherwise first product
     const initialIndex = firstProductOnboarding
         ? Math.max(0, allProducts.indexOf(firstProductOnboarding as AvailableOnboardingProductKey))
-        : null
+        : 0
 
-    const [activeIndex, setActiveIndex] = useState<number | null>(initialIndex)
+    const [activeIndex, setActiveIndex] = useState<number>(initialIndex)
     const [transitioning, setTransitioning] = useState(false)
+    const [slideDirection, setSlideDirection] = useState<'left' | 'right'>('right')
+    const [mounted, setMounted] = useState(false)
 
-    const spotlightKey = activeIndex !== null ? allProducts[activeIndex] : null
-    const spotlightProduct = spotlightKey ? availableOnboardingProducts[spotlightKey] : null
-    const spotlightDescription = spotlightProduct?.userCentricDescription || spotlightProduct?.description
-    const HedgehogComponent = spotlightKey ? PRODUCT_HEDGEHOG[spotlightKey] : null
+    useEffect(() => {
+        const timer = setTimeout(() => setMounted(true), 100)
+        return () => clearTimeout(timer)
+    }, [])
 
-    // Center the arc at the middle product when nothing is selected
-    const arcCenterIndex = activeIndex ?? Math.floor(allProducts.length / 2)
+    const spotlightKey = allProducts[activeIndex]
+    const spotlightProduct = availableOnboardingProducts[spotlightKey]
+    const spotlightDescription = spotlightProduct.userCentricDescription || spotlightProduct.description
+    const HedgehogComponent = PRODUCT_HEDGEHOG[spotlightKey]
 
     const navigateTo = useCallback(
-        (newIndex: number): void => {
+        (newIndex: number, direction: 'left' | 'right'): void => {
             const productKey = allProducts[newIndex]
-            if (activeIndex !== null) {
-                setTransitioning(true)
-                setTimeout(() => {
-                    setActiveIndex(newIndex)
-                    setFirstProductOnboarding(productKey)
-                    setTransitioning(false)
-                }, 200)
-            } else {
+            setSlideDirection(direction)
+            setTransitioning(true)
+            setTimeout(() => {
                 setActiveIndex(newIndex)
                 setFirstProductOnboarding(productKey)
-            }
+                setTransitioning(false)
+            }, 200)
         },
-        [activeIndex, allProducts, setFirstProductOnboarding]
+        [allProducts, setFirstProductOnboarding]
     )
 
     const handlePickProduct = (productKey: AvailableOnboardingProductKey): void => {
-        navigateTo(allProducts.indexOf(productKey))
+        const newIndex = allProducts.indexOf(productKey)
+        const direction = getWrappedOffset(newIndex) > 0 ? 'right' : 'left'
+        navigateTo(newIndex, direction)
     }
 
     const handlePrev = (): void => {
-        const current = activeIndex ?? Math.floor(allProducts.length / 2)
-        navigateTo((current - 1 + allProducts.length) % allProducts.length)
+        navigateTo((activeIndex - 1 + allProducts.length) % allProducts.length, 'left')
     }
 
     const handleNext = (): void => {
-        const current = activeIndex ?? Math.floor(allProducts.length / 2)
-        navigateTo((current + 1) % allProducts.length)
+        navigateTo((activeIndex + 1) % allProducts.length, 'right')
     }
 
     const handleGetStarted = (): void => {
-        if (spotlightKey) {
-            selectSingleProduct(spotlightKey)
-        }
+        selectSingleProduct(spotlightKey)
     }
 
     useEffect(() => {
@@ -526,7 +523,7 @@ function SimplifiedProductSelection(): JSX.Element {
             } else if (e.key === 'ArrowRight') {
                 e.preventDefault()
                 handleNext()
-            } else if (e.key === 'Enter' && spotlightKey) {
+            } else if (e.key === 'Enter') {
                 e.preventDefault()
                 handleGetStarted()
             }
@@ -536,7 +533,7 @@ function SimplifiedProductSelection(): JSX.Element {
     })
 
     const getWrappedOffset = (itemIndex: number): number => {
-        let offset = itemIndex - arcCenterIndex
+        let offset = itemIndex - activeIndex
         const half = allProducts.length / 2
         if (offset > half) {
             offset -= allProducts.length
@@ -556,7 +553,7 @@ function SimplifiedProductSelection(): JSX.Element {
                 <h1 className="text-4xl font-bold text-center mb-1">What's your first priority?</h1>
                 <p className="text-center text-muted mb-6">
                     {hasBrowsingHistory
-                        ? 'Based on your browsing, we think this is a great place to start.'
+                        ? 'Based on your browsing, we picked a great place to start.'
                         : 'Pick one to start — you can always add more later.'}
                 </p>
 
@@ -570,77 +567,66 @@ function SimplifiedProductSelection(): JSX.Element {
                         <IconChevronLeft className="text-2xl" />
                     </button>
                     <div className="flex-1 max-w-xl mx-auto rounded-lg border overflow-hidden bg-surface-primary">
-                        {spotlightProduct ? (
-                            <>
+                        <div
+                            className="h-1 transition-all duration-500"
+                            style={{ backgroundColor: spotlightProduct.iconColor }}
+                        />
+                        <div
+                            className="flex h-[256px] transition-all duration-200"
+                            style={{
+                                opacity: transitioning ? 0 : 1,
+                                transform: transitioning
+                                    ? `translateX(${slideDirection === 'right' ? '-12px' : '12px'})`
+                                    : 'translateX(0)',
+                            }}
+                        >
+                            <div className="w-[140px] shrink-0 relative overflow-hidden flex items-end justify-center">
                                 <div
-                                    className="h-1 transition-all duration-500"
+                                    className="absolute inset-0 opacity-[0.15]"
                                     style={{ backgroundColor: spotlightProduct.iconColor }}
                                 />
-                                <div
-                                    className={clsx(
-                                        'flex h-[256px] transition-opacity duration-200',
-                                        transitioning ? 'opacity-0' : 'opacity-100'
-                                    )}
-                                >
-                                    <div className="w-[140px] shrink-0 relative overflow-hidden flex items-end justify-center">
-                                        <div
-                                            className="absolute inset-0 opacity-[0.15]"
-                                            style={{ backgroundColor: spotlightProduct.iconColor }}
-                                        />
-                                        {HedgehogComponent && (
-                                            <HedgehogComponent className="relative z-10 w-[110px] h-[110px] object-contain mb-1" />
-                                        )}
-                                    </div>
-                                    <div className="flex-1 flex flex-col justify-between p-5">
-                                        <div>
-                                            <div className="flex items-center gap-1.5 text-xs text-muted mb-1.5">
-                                                {getProductIcon(spotlightProduct.icon, {
-                                                    iconColor: spotlightProduct.iconColor,
-                                                    className: 'text-sm',
-                                                })}
-                                                <span>{toSentenceCase(spotlightProduct.name)}</span>
-                                            </div>
-                                            <h2 className="text-xl font-bold mb-2">{spotlightDescription}</h2>
-                                            {spotlightProduct.capabilities && (
-                                                <ul className="list-none p-0 m-0 flex flex-col gap-1">
-                                                    {spotlightProduct.capabilities.map((cap) => (
-                                                        <li
-                                                            key={cap}
-                                                            className="text-sm text-muted flex items-center gap-2"
-                                                        >
-                                                            <span
-                                                                className="w-1 h-1 rounded-full shrink-0"
-                                                                style={{
-                                                                    backgroundColor: spotlightProduct.iconColor,
-                                                                }}
-                                                            />
-                                                            {cap}
-                                                        </li>
-                                                    ))}
-                                                </ul>
-                                            )}
-                                        </div>
-                                        <LemonButton
-                                            type="primary"
-                                            status="alt"
-                                            size="large"
-                                            onClick={handleGetStarted}
-                                            sideIcon={<IconArrowRight />}
-                                            data-attr="onboarding-continue"
-                                        >
-                                            Get started
-                                        </LemonButton>
-                                    </div>
-                                </div>
-                            </>
-                        ) : (
-                            <div className="h-[260px] flex items-center justify-center gap-6 p-5">
-                                <WavingHog className="w-[100px] h-[100px] object-contain shrink-0" />
-                                <p className="text-muted text-lg mb-0">
-                                    Pick a product from the wheel to see what it does
-                                </p>
+                                {HedgehogComponent && (
+                                    <HedgehogComponent className="relative z-10 w-[110px] h-[110px] object-contain mb-1" />
+                                )}
                             </div>
-                        )}
+                            <div className="flex-1 flex flex-col justify-between p-5">
+                                <div>
+                                    <div className="flex items-center gap-1.5 text-xs text-muted mb-1.5">
+                                        {getProductIcon(spotlightProduct.icon, {
+                                            iconColor: spotlightProduct.iconColor,
+                                            className: 'text-sm',
+                                        })}
+                                        <span>{toSentenceCase(spotlightProduct.name)}</span>
+                                    </div>
+                                    <h2 className="text-xl font-bold mb-2">{spotlightDescription}</h2>
+                                    {spotlightProduct.capabilities && (
+                                        <ul className="list-none p-0 m-0 flex flex-col gap-1">
+                                            {spotlightProduct.capabilities.map((cap) => (
+                                                <li key={cap} className="text-sm text-muted flex items-center gap-2">
+                                                    <span
+                                                        className="w-1 h-1 rounded-full shrink-0"
+                                                        style={{
+                                                            backgroundColor: spotlightProduct.iconColor,
+                                                        }}
+                                                    />
+                                                    {cap}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    )}
+                                </div>
+                                <LemonButton
+                                    type="primary"
+                                    status="alt"
+                                    size="large"
+                                    onClick={handleGetStarted}
+                                    sideIcon={<IconArrowRight />}
+                                    data-attr="onboarding-continue"
+                                >
+                                    Start with {toSentenceCase(spotlightProduct.name)}
+                                </LemonButton>
+                            </div>
+                        </div>
                     </div>
                     <button
                         onClick={handleNext}
@@ -658,12 +644,14 @@ function SimplifiedProductSelection(): JSX.Element {
                         const offset = getWrappedOffset(index)
                         const absOffset = Math.abs(offset)
                         const isActive = index === activeIndex
-                        const isVisible = absOffset <= 4
+                        const isVisible = absOffset <= 5
 
                         const x = offset * 100
-                        const y = absOffset * absOffset * 5
-                        const scale = Math.max(0.6, 1 - absOffset * 0.08)
-                        const itemOpacity = isVisible ? Math.max(0.15, 1 - absOffset * 0.22) : 0
+                        const y = absOffset * absOffset * 3
+                        const scale = Math.max(0.65, 1 - absOffset * 0.06)
+                        const itemOpacity = isVisible ? Math.max(0.3, 1 - absOffset * 0.15) : 0
+
+                        const entranceDelay = absOffset * 60
 
                         return (
                             <button
@@ -674,9 +662,12 @@ function SimplifiedProductSelection(): JSX.Element {
                                     isVisible ? 'cursor-pointer' : 'pointer-events-none'
                                 )}
                                 style={{
-                                    transform: `translateX(calc(-50% + ${x}px)) translateY(${y}px) scale(${scale})`,
-                                    opacity: itemOpacity,
+                                    transform: mounted
+                                        ? `translateX(calc(-50% + ${x}px)) translateY(${y}px) scale(${scale})`
+                                        : `translateX(-50%) translateY(30px) scale(0.8)`,
+                                    opacity: mounted ? itemOpacity : 0,
                                     zIndex: 10 - absOffset,
+                                    transitionDelay: !mounted ? `${entranceDelay}ms` : '0ms',
                                 }}
                                 data-attr={`${productKey}-arc-item`}
                             >
@@ -696,7 +687,8 @@ function SimplifiedProductSelection(): JSX.Element {
                                 <span
                                     className={clsx(
                                         'text-xs whitespace-nowrap transition-all duration-300',
-                                        isActive ? 'text-default font-medium' : 'text-muted'
+                                        isActive ? 'text-default font-medium' : 'text-muted',
+                                        absOffset > 2 && 'opacity-0'
                                     )}
                                 >
                                     {toSentenceCase(product.name)}
@@ -716,14 +708,12 @@ function SimplifiedProductSelection(): JSX.Element {
                         </kbd>
                         browse
                     </span>
-                    {spotlightKey && (
-                        <span className="flex items-center gap-1.5">
-                            <kbd className="px-1.5 py-0.5 rounded border border-primary bg-surface-primary text-[10px] font-mono">
-                                &crarr;
-                            </kbd>
-                            select
-                        </span>
-                    )}
+                    <span className="flex items-center gap-1.5">
+                        <kbd className="px-1.5 py-0.5 rounded border border-primary bg-surface-primary text-[10px] font-mono">
+                            &crarr;
+                        </kbd>
+                        select
+                    </span>
                 </div>
                 <p className="text-muted text-xs mb-2">You can add more products anytime from Settings.</p>
                 <p className="text-muted text-sm">
