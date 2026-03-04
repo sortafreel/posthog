@@ -132,8 +132,8 @@ def _get_feature_flags_for_teams_batch(teams: list[Team]) -> dict[int, dict[str,
             deleted=False,
         ).annotate(
             evaluation_tag_names_agg=ArrayAgg(
-                "evaluation_tags__tag__name",
-                filter=Q(evaluation_tags__isnull=False),
+                "flag_evaluation_contexts__evaluation_context__name",
+                filter=Q(flag_evaluation_contexts__isnull=False),
                 distinct=True,
             )
         )
