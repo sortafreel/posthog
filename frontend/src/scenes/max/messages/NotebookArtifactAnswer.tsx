@@ -66,6 +66,12 @@ export function NotebookArtifactAnswer({
         }
     }, [content.blocks, status])
 
+    useEffect(() => {
+        if (content.is_saved) {
+            setLocalIsSaved(true)
+        }
+    }, [content.is_saved])
+
     const isStreaming = status !== 'completed'
     const hasContent = content.blocks.length > 0
 

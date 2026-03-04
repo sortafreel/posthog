@@ -121,21 +121,18 @@ class CreateNotebookTool(MaxTool):
         notebook_content = draft_content if is_draft else content
         assert notebook_content is not None
 
-        artifact, status = await create_or_update_notebook_artifact(
+        artifact, status, blocks = await create_or_update_notebook_artifact(
             artifacts_manager=self._context_manager.artifacts,
             content=notebook_content,
             title=title,
             artifact_id=artifact_id,
         )
 
-        from ee.hogai.tools.create_notebook.parsing import parse_notebook_content_for_storage
-
         # Check if this artifact already has a saved notebook
         is_already_saved = await notebook_exists_for_artifact(self._team, artifact.short_id)
 
         # Save to DB if explicitly requested or if updating an already-saved notebook
         if save_to_notebook or is_already_saved:
-            blocks = parse_notebook_content_for_storage(notebook_content, title=title)
             await save_notebook_to_db(
                 team=self._team,
                 user=self._user,
