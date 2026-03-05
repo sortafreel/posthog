@@ -353,28 +353,47 @@ def get_all_schemas_for_source_id(source_id: str, team_id: int):
 
 
 def sync_old_schemas_with_new_schemas(
-    new_schemas: list[str], source_id: str, team_id: int
+    new_schemas: dict[str, dict], source_id: str, team_id: int
 ) -> tuple[list[str], list[str]]:
+    new_schema_names = list(new_schemas.keys())
+
     old_schemas = get_all_schemas_for_source_id(source_id=source_id, team_id=team_id)
     old_schemas_names = [schema.name for schema in old_schemas]
 
-    schemas_to_create = [schema for schema in new_schemas if schema not in old_schemas_names]
+    schemas_to_create = [name for name in new_schema_names if name not in old_schemas_names]
 
-    schemas_to_possibly_delete = [schema for schema in old_schemas_names if schema not in new_schemas]
+    schemas_to_possibly_delete = [name for name in old_schemas_names if name not in new_schema_names]
     deleted_schemas: list[str] = []
     actually_created: list[str] = []
 
-    for schema in schemas_to_create:
+    for schema_name in schemas_to_create:
+        defaults: dict[str, Any] = {"should_sync": False}
+        schema_metadata = new_schemas.get(schema_name, {})
+        if schema_metadata:
+            defaults["sync_type_config"] = schema_metadata
+
         obj, created = ExternalDataSchema.objects.get_or_create(
-            team_id=team_id, source_id=source_id, name=schema, deleted=False, defaults={"should_sync": False}
+            team_id=team_id, source_id=source_id, name=schema_name, deleted=False, defaults=defaults
         )
         if created:
-            actually_created.append(schema)
+            actually_created.append(schema_name)
         elif obj.deleted:
             obj.deleted = False
             obj.deleted_at = None
             obj.should_sync = False
             obj.save(update_fields=["deleted", "deleted_at", "should_sync"])
+
+    # Update metadata on existing schemas that already exist
+    for old_schema in old_schemas:
+        schema_metadata = new_schemas.get(old_schema.name, {})
+        if schema_metadata:
+            updated = False
+            for key, value in schema_metadata.items():
+                if old_schema.sync_type_config.get(key) != value:
+                    old_schema.sync_type_config[key] = value
+                    updated = True
+            if updated:
+                old_schema.save(update_fields=["sync_type_config"])
 
     for schema in schemas_to_possibly_delete:
         # There _could_ exist multiple schemas with the same name, there shouldn't be, but it's not impossible

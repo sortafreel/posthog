@@ -72,12 +72,15 @@ class SlackSource(SimpleSource[SlackSourceConfig], OAuthMixin):
             msg_config = messages_endpoint_config()
             channels = get_channels(access_token)
             for ch in channels:
+                if ch["name"] in ENDPOINTS:
+                    continue
                 schemas.append(
                     SourceSchema(
                         name=ch["name"],
                         supports_incremental=len(msg_config.incremental_fields) > 0,
                         supports_append=len(msg_config.incremental_fields) > 0,
                         incremental_fields=msg_config.incremental_fields,
+                        metadata={"channel_id": ch["id"]},
                     )
                 )
 
@@ -117,4 +120,5 @@ class SlackSource(SimpleSource[SlackSourceConfig], OAuthMixin):
             if inputs.should_use_incremental_field
             else None,
             incremental_field=inputs.incremental_field,
+            channel_id=inputs.sync_type_config.get("channel_id"),
         )

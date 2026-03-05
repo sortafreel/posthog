@@ -54,6 +54,7 @@ class SourceInputs:
     incremental_field_type: Optional[IncrementalFieldType]
     job_id: str
     logger: FilteringBoundLogger
+    sync_type_config: dict = dataclasses.field(default_factory=dict)
 
 
 class PipelineResult(TypedDict):

@@ -686,7 +686,7 @@ class ExternalDataSourceViewSet(TeamAndOrgViewSetMixin, AccessControlViewSetMixi
         with transaction.atomic():
             ExternalDataSource._base_manager.filter(pk=instance.pk).select_for_update().get()
             schemas_created, schemas_deleted = sync_old_schemas_with_new_schemas(
-                schema_names, source_id=str(instance.id), team_id=self.team_id
+                {s.name: s.metadata for s in schemas}, source_id=str(instance.id), team_id=self.team_id
             )
         logger.debug(
             "refresh_schemas completed",

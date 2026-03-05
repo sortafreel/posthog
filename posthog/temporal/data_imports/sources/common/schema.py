@@ -10,3 +10,4 @@ class SourceSchema:
     supports_append: bool
     incremental_fields: list[IncrementalField] = field(default_factory=list)
     row_count: int | None = None
+    metadata: dict = field(default_factory=dict)
