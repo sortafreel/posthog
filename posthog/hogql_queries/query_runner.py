@@ -213,18 +213,6 @@ def get_query_runner(
     modifiers: Optional[HogQLQueryModifiers] = None,
     request: Optional["Request"] = None,
 ) -> "QueryRunner":
-    runner = _get_query_runner(query, team, timings, limit_context, modifiers)
-    runner.request = request
-    return runner
-
-
-def _get_query_runner(
-    query: dict[str, Any] | RunnableQueryNode | BaseModel,
-    team: Team,
-    timings: Optional[HogQLTimings] = None,
-    limit_context: Optional[LimitContext] = None,
-    modifiers: Optional[HogQLQueryModifiers] = None,
-) -> "QueryRunner":
     try:
         kind = get_from_dict_or_attr(query, "kind")
     except AttributeError:
@@ -245,6 +233,7 @@ def _get_query_runner(
                 timings=timings,
                 limit_context=limit_context,
                 modifiers=modifiers,
+                request=request,
             )
 
         from .insights.trends.trends_query_runner import TrendsQueryRunner
@@ -255,6 +244,7 @@ def _get_query_runner(
             timings=timings,
             limit_context=limit_context,
             modifiers=modifiers,
+            request=request,
         )
     if kind == "FunnelsQuery":
         from .insights.funnels.funnels_query_runner import FunnelsQueryRunner
@@ -265,6 +255,7 @@ def _get_query_runner(
             timings=timings,
             limit_context=limit_context,
             modifiers=modifiers,
+            request=request,
         )
     if kind == "RetentionQuery":
         from .insights.retention_query_runner import RetentionQueryRunner
@@ -275,6 +266,7 @@ def _get_query_runner(
             timings=timings,
             limit_context=limit_context,
             modifiers=modifiers,
+            request=request,
         )
     if kind == "PathsQuery":
         from .insights.paths_query_runner import PathsQueryRunner
@@ -285,6 +277,7 @@ def _get_query_runner(
             timings=timings,
             limit_context=limit_context,
             modifiers=modifiers,
+            request=request,
         )
 
     if kind == "CalendarHeatmapQuery":
@@ -296,6 +289,7 @@ def _get_query_runner(
             timings=timings,
             limit_context=limit_context,
             modifiers=modifiers,
+            request=request,
         )
     if kind == "StickinessQuery":
         from .insights.stickiness_query_runner import StickinessQueryRunner
@@ -306,6 +300,7 @@ def _get_query_runner(
             timings=timings,
             limit_context=limit_context,
             modifiers=modifiers,
+            request=request,
         )
     if kind == "LifecycleQuery":
         from .insights.lifecycle_query_runner import LifecycleQueryRunner
@@ -316,6 +311,7 @@ def _get_query_runner(
             timings=timings,
             limit_context=limit_context,
             modifiers=modifiers,
+            request=request,
         )
     if kind == "EventsQuery":
         from .events_query_runner import EventsQueryRunner
@@ -326,6 +322,7 @@ def _get_query_runner(
             timings=timings,
             limit_context=limit_context,
             modifiers=modifiers,
+            request=request,
         )
     if kind == "SessionsQuery":
         from .sessions_query_runner import SessionsQueryRunner
@@ -336,6 +333,7 @@ def _get_query_runner(
             timings=timings,
             limit_context=limit_context,
             modifiers=modifiers,
+            request=request,
         )
     if kind == "SessionBatchEventsQuery":
         from .ai.session_batch_events_query_runner import SessionBatchEventsQueryRunner
@@ -346,6 +344,7 @@ def _get_query_runner(
             timings=timings,
             limit_context=limit_context,
             modifiers=modifiers,
+            request=request,
         )
     if kind == "ActorsQuery":
         from .actors_query_runner import ActorsQueryRunner
@@ -356,6 +355,7 @@ def _get_query_runner(
             timings=timings,
             limit_context=limit_context,
             modifiers=modifiers,
+            request=request,
         )
 
     if kind == "GroupsQuery":
@@ -367,6 +367,7 @@ def _get_query_runner(
             timings=timings,
             modifiers=modifiers,
             limit_context=limit_context,
+            request=request,
         )
 
     if kind in ("InsightActorsQuery", "FunnelsActorsQuery", "FunnelCorrelationActorsQuery", "StickinessActorsQuery"):
@@ -378,6 +379,7 @@ def _get_query_runner(
             timings=timings,
             limit_context=limit_context,
             modifiers=modifiers,
+            request=request,
         )
     if kind == "InsightActorsQueryOptions":
         from .insights.insight_actors_query_options_runner import InsightActorsQueryOptionsRunner
@@ -388,6 +390,7 @@ def _get_query_runner(
             timings=timings,
             limit_context=limit_context,
             modifiers=modifiers,
+            request=request,
         )
     if kind == "FunnelCorrelationQuery":
         from .insights.funnels.funnel_correlation_query_runner import FunnelCorrelationQueryRunner
@@ -398,6 +401,7 @@ def _get_query_runner(
             timings=timings,
             limit_context=limit_context,
             modifiers=modifiers,
+            request=request,
         )
     if kind == "HogQLQuery":
         from .hogql_query_runner import HogQLQueryRunner
@@ -408,6 +412,7 @@ def _get_query_runner(
             timings=timings,
             limit_context=limit_context,
             modifiers=modifiers,
+            request=request,
         )
     if kind == "SessionsTimelineQuery":
         from .sessions_timeline_query_runner import SessionsTimelineQueryRunner
@@ -418,6 +423,7 @@ def _get_query_runner(
             timings=timings,
             modifiers=modifiers,
             limit_context=limit_context,
+            request=request,
         )
     if kind == "WebOverviewQuery":
         from .web_analytics.web_overview import WebOverviewQueryRunner
@@ -428,6 +434,7 @@ def _get_query_runner(
             timings=timings,
             modifiers=modifiers,
             limit_context=limit_context,
+            request=request,
         )
 
     if kind == "WebStatsTableQuery":
@@ -439,6 +446,7 @@ def _get_query_runner(
             timings=timings,
             modifiers=modifiers,
             limit_context=limit_context,
+            request=request,
         )
 
     if kind == "WebGoalsQuery":
@@ -450,6 +458,7 @@ def _get_query_runner(
             timings=timings,
             modifiers=modifiers,
             limit_context=limit_context,
+            request=request,
         )
 
     if kind == "WebTrendsQuery":
@@ -461,6 +470,7 @@ def _get_query_runner(
             timings=timings,
             modifiers=modifiers,
             limit_context=limit_context,
+            request=request,
         )
 
     if kind == "WebExternalClicksTableQuery":
@@ -472,6 +482,7 @@ def _get_query_runner(
             timings=timings,
             modifiers=modifiers,
             limit_context=limit_context,
+            request=request,
         )
 
     if kind == "WebVitalsPathBreakdownQuery":
@@ -480,6 +491,7 @@ def _get_query_runner(
         return WebVitalsPathBreakdownQueryRunner(
             query=query,
             team=team,
+            request=request,
         )
 
     if kind == "WebPageURLSearchQuery":
@@ -491,6 +503,7 @@ def _get_query_runner(
             timings=timings,
             modifiers=modifiers,
             limit_context=limit_context,
+            request=request,
         )
 
     if kind == "SessionAttributionExplorerQuery":
@@ -502,6 +515,7 @@ def _get_query_runner(
             timings=timings,
             modifiers=modifiers,
             limit_context=limit_context,
+            request=request,
         )
 
     if kind == "RevenueAnalyticsGrossRevenueQuery":
@@ -515,6 +529,7 @@ def _get_query_runner(
             timings=timings,
             modifiers=modifiers,
             limit_context=limit_context,
+            request=request,
         )
 
     if kind == "RevenueAnalyticsMetricsQuery":
@@ -528,6 +543,7 @@ def _get_query_runner(
             timings=timings,
             modifiers=modifiers,
             limit_context=limit_context,
+            request=request,
         )
 
     if kind == "RevenueAnalyticsMRRQuery":
@@ -541,6 +557,7 @@ def _get_query_runner(
             timings=timings,
             modifiers=modifiers,
             limit_context=limit_context,
+            request=request,
         )
 
     if kind == "RevenueAnalyticsOverviewQuery":
@@ -554,6 +571,7 @@ def _get_query_runner(
             timings=timings,
             modifiers=modifiers,
             limit_context=limit_context,
+            request=request,
         )
 
     if kind == "RevenueAnalyticsTopCustomersQuery":
@@ -567,6 +585,7 @@ def _get_query_runner(
             timings=timings,
             modifiers=modifiers,
             limit_context=limit_context,
+            request=request,
         )
 
     if kind == "RevenueExampleEventsQuery":
@@ -580,6 +599,7 @@ def _get_query_runner(
             timings=timings,
             modifiers=modifiers,
             limit_context=limit_context,
+            request=request,
         )
 
     if kind == "RevenueExampleDataWarehouseTablesQuery":
@@ -593,6 +613,7 @@ def _get_query_runner(
             timings=timings,
             modifiers=modifiers,
             limit_context=limit_context,
+            request=request,
         )
 
     if kind == "ErrorTrackingQuery":
@@ -604,6 +625,7 @@ def _get_query_runner(
             timings=timings,
             modifiers=modifiers,
             limit_context=limit_context,
+            request=request,
         )
 
     if kind == "DocumentSimilarityQuery":
@@ -615,6 +637,7 @@ def _get_query_runner(
             timings=timings,
             modifiers=modifiers,
             limit_context=limit_context,
+            request=request,
         )
 
     if kind == "ErrorTrackingIssueCorrelationQuery":
@@ -628,6 +651,7 @@ def _get_query_runner(
             timings=timings,
             modifiers=modifiers,
             limit_context=limit_context,
+            request=request,
         )
 
     if kind == "ErrorTrackingSimilarIssuesQuery":
@@ -641,6 +665,7 @@ def _get_query_runner(
             timings=timings,
             modifiers=modifiers,
             limit_context=limit_context,
+            request=request,
         )
 
     if kind == "ErrorTrackingBreakdownsQuery":
@@ -654,6 +679,7 @@ def _get_query_runner(
             timings=timings,
             modifiers=modifiers,
             limit_context=limit_context,
+            request=request,
         )
 
     if kind == "ExperimentFunnelsQuery":
@@ -665,6 +691,7 @@ def _get_query_runner(
             timings=timings,
             modifiers=modifiers,
             limit_context=limit_context,
+            request=request,
         )
 
     if kind == "ExperimentTrendsQuery":
@@ -676,6 +703,7 @@ def _get_query_runner(
             timings=timings,
             modifiers=modifiers,
             limit_context=limit_context,
+            request=request,
         )
 
     if kind == "ExperimentQuery":
@@ -687,6 +715,7 @@ def _get_query_runner(
             timings=timings,
             modifiers=modifiers,
             limit_context=limit_context,
+            request=request,
         )
 
     if kind == "ExperimentExposureQuery":
@@ -698,6 +727,7 @@ def _get_query_runner(
             timings=timings,
             limit_context=limit_context,
             modifiers=modifiers,
+            request=request,
         )
 
     if kind == "SuggestedQuestionsQuery":
@@ -709,6 +739,7 @@ def _get_query_runner(
             timings=timings,
             limit_context=limit_context,
             modifiers=modifiers,
+            request=request,
         )
     if kind == "TeamTaxonomyQuery":
         from .ai.team_taxonomy_query_runner import TeamTaxonomyQueryRunner
@@ -719,6 +750,7 @@ def _get_query_runner(
             timings=timings,
             limit_context=limit_context,
             modifiers=modifiers,
+            request=request,
         )
     if kind == "EventTaxonomyQuery":
         from .ai.event_taxonomy_query_runner import EventTaxonomyQueryRunner
@@ -729,6 +761,7 @@ def _get_query_runner(
             timings=timings,
             limit_context=limit_context,
             modifiers=modifiers,
+            request=request,
         )
     if kind == "ActorsPropertyTaxonomyQuery":
         from .ai.actors_property_taxonomy_query_runner import ActorsPropertyTaxonomyQueryRunner
@@ -739,6 +772,7 @@ def _get_query_runner(
             timings=timings,
             limit_context=limit_context,
             modifiers=modifiers,
+            request=request,
         )
     if kind == "TracesQuery":
         from .ai.traces_query_runner import TracesQueryRunner
@@ -749,6 +783,7 @@ def _get_query_runner(
             timings=timings,
             limit_context=limit_context,
             modifiers=modifiers,
+            request=request,
         )
     if kind == "TraceQuery":
         from .ai.trace_query_runner import TraceQueryRunner
@@ -759,6 +794,7 @@ def _get_query_runner(
             timings=timings,
             limit_context=limit_context,
             modifiers=modifiers,
+            request=request,
         )
     if kind == "TraceNeighborsQuery":
         from .ai.trace_neighbors_query_runner import TraceNeighborsQueryRunner
@@ -769,6 +805,7 @@ def _get_query_runner(
             timings=timings,
             limit_context=limit_context,
             modifiers=modifiers,
+            request=request,
         )
     if kind == "VectorSearchQuery":
         from .ai.vector_search_query_runner import VectorSearchQueryRunner
@@ -779,6 +816,7 @@ def _get_query_runner(
             timings=timings,
             limit_context=limit_context,
             modifiers=modifiers,
+            request=request,
         )
 
     if kind == NodeKind.MARKETING_ANALYTICS_TABLE_QUERY:
@@ -792,6 +830,7 @@ def _get_query_runner(
             timings=timings,
             modifiers=modifiers,
             limit_context=limit_context,
+            request=request,
         )
 
     if kind == NodeKind.MARKETING_ANALYTICS_AGGREGATED_QUERY:
@@ -805,6 +844,7 @@ def _get_query_runner(
             timings=timings,
             modifiers=modifiers,
             limit_context=limit_context,
+            request=request,
         )
 
     if kind == NodeKind.NON_INTEGRATED_CONVERSIONS_TABLE_QUERY:
@@ -818,6 +858,7 @@ def _get_query_runner(
             timings=timings,
             modifiers=modifiers,
             limit_context=limit_context,
+            request=request,
         )
 
     if kind == "UsageMetricsQuery":
@@ -829,6 +870,7 @@ def _get_query_runner(
             timings=timings,
             modifiers=modifiers,
             limit_context=limit_context,
+            request=request,
         )
 
     if kind == "EndpointsUsageOverviewQuery":
@@ -840,6 +882,7 @@ def _get_query_runner(
             timings=timings,
             modifiers=modifiers,
             limit_context=limit_context,
+            request=request,
         )
 
     if kind == "EndpointsUsageTableQuery":
@@ -851,6 +894,7 @@ def _get_query_runner(
             timings=timings,
             modifiers=modifiers,
             limit_context=limit_context,
+            request=request,
         )
 
     if kind == "EndpointsUsageTrendsQuery":
@@ -862,6 +906,7 @@ def _get_query_runner(
             timings=timings,
             modifiers=modifiers,
             limit_context=limit_context,
+            request=request,
         )
 
     # Registered here for server-side CSV export only (ExportedAsset + Celery).
@@ -875,6 +920,7 @@ def _get_query_runner(
             timings=timings,
             modifiers=modifiers,
             limit_context=limit_context,
+            request=request,
         )
 
     if kind == "PropertyValuesQuery":
@@ -886,6 +932,7 @@ def _get_query_runner(
             timings=timings,
             modifiers=modifiers,
             limit_context=limit_context,
+            request=request,
         )
 
     raise ValueError(f"Can't get a runner for an unknown query kind: {kind}")
