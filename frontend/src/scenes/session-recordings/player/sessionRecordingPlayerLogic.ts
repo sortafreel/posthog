@@ -42,6 +42,7 @@ import { userLogic } from 'scenes/userLogic'
 
 import { AvailableFeature, ExporterFormat, RecordingSegment, SessionPlayerData, SessionPlayerState } from '~/types'
 
+import { deletedRecordingsLogic } from '../deletedRecordingsLogic'
 import { ExportedSessionRecordingFileV2 } from '../file-playback/types'
 import { sessionRecordingEventUsageLogic } from '../sessionRecordingEventUsageLogic'
 import { playerCommentOverlayLogic } from './commenting/playerFrameCommentOverlayLogic'
@@ -450,6 +451,8 @@ export const sessionRecordingPlayerLogic = kea<sessionRecordingPlayerLogicType>(
             ['reportNextRecordingTriggered', 'reportRecordingExportedToFile'],
             exportsLogic,
             ['startReplayExport'],
+            deletedRecordingsLogic,
+            ['addDeletedRecordings'],
         ],
     })),
     actions({
@@ -1987,6 +1990,7 @@ export const sessionRecordingPlayerLogic = kea<sessionRecordingPlayerLogicType>(
         },
         deleteRecording: async () => {
             await deleteRecording(props.sessionRecordingId)
+            actions.addDeletedRecordings([props.sessionRecordingId])
 
             if (props.onRecordingDeleted) {
                 props.onRecordingDeleted()

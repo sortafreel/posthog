@@ -57,6 +57,7 @@ import {
     UniversalFiltersGroup,
 } from '~/types'
 
+import { deletedRecordingsLogic } from '../deletedRecordingsLogic'
 import { playerSettingsLogic } from '../player/playerSettingsLogic'
 import { filtersFromUniversalFilterGroups } from '../utils'
 import { playlistFiltersLogic } from './playlistFiltersLogic'
@@ -515,6 +516,8 @@ export const sessionRecordingsPlaylistLogic = kea<sessionRecordingsPlaylistLogic
             ['setHideViewedRecordings'],
             playlistFiltersLogic,
             ['setIsFiltersExpanded'],
+            deletedRecordingsLogic,
+            ['addDeletedRecordings'],
         ],
         values: [
             featureFlagLogic,
@@ -523,6 +526,8 @@ export const sessionRecordingsPlaylistLogic = kea<sessionRecordingsPlaylistLogic
             ['autoplayDirection', 'hideViewedRecordings'],
             groupsModel,
             ['groupsTaxonomicTypes'],
+            deletedRecordingsLogic,
+            ['deletedRecordingIds'],
         ],
     })),
 
@@ -1144,19 +1149,17 @@ export const sessionRecordingsPlaylistLogic = kea<sessionRecordingsPlaylistLogic
             await lemonToast.promise(
                 (async () => {
                     try {
+                        const idsToDelete = [...values.selectedRecordingsIds]
                         actions.setDeleteConfirmationText('')
                         actions.setIsDeleteSelectedRecordingsDialogOpen(false)
-                        await api.recordings.bulkDeleteRecordings(
-                            values.selectedRecordingsIds,
-                            values.filters.date_from
-                        )
+                        const result = await api.recordings.bulkDeleteRecordings(idsToDelete, values.filters.date_from)
+                        const failedSet = new Set(result.failed_ids ?? [])
+                        const deletedIds = idsToDelete.filter((id) => !failedSet.has(id))
+                        actions.addDeletedRecordings(deletedIds)
                         actions.setSelectedRecordingsIds([])
 
-                        // If it was a collection then we need to reload it, otherwise we need to reload the recordings
                         if (shortId) {
                             handleLoadCollectionRecordings(shortId)
-                        } else {
-                            actions.loadSessionRecordings()
                         }
                     } catch (e) {
                         posthog.captureException(e)
@@ -1407,16 +1410,20 @@ export const sessionRecordingsPlaylistLogic = kea<sessionRecordingsPlaylistLogic
         ],
 
         recordings: [
-            (s) => [s.pinnedRecordings, s.otherRecordings, (_, props) => props.onlyPinned],
-            (pinnedRecordings, otherRecordings, onlyPinned): SessionRecordingType[] => {
-                return onlyPinned ? [...pinnedRecordings] : [...pinnedRecordings, ...otherRecordings]
+            (s) => [s.pinnedRecordings, s.otherRecordings, s.deletedRecordingIds, (_, props) => props.onlyPinned],
+            (pinnedRecordings, otherRecordings, deletedRecordingIds, onlyPinned): SessionRecordingType[] => {
+                const all = onlyPinned ? [...pinnedRecordings] : [...pinnedRecordings, ...otherRecordings]
+                if (deletedRecordingIds.size === 0) {
+                    return all
+                }
+                return all.filter((r) => !deletedRecordingIds.has(r.id))
             },
         ],
 
         recordingsCount: [
-            (s) => [s.pinnedRecordings, s.otherRecordings],
-            (pinnedRecordings, otherRecordings): number => {
-                return otherRecordings.length + pinnedRecordings.length
+            (s) => [s.recordings],
+            (recordings): number => {
+                return recordings.length
             },
         ],
 
