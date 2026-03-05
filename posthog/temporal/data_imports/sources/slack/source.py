@@ -32,7 +32,7 @@ class SlackSource(SimpleSource[SlackSourceConfig], OAuthMixin):
     def get_source_config(self) -> SourceConfig:
         return SourceConfig(
             name=SchemaExternalDataSourceType.SLACK,
-            caption="Select an existing Slack workspace to link to PostHog or create a new connection",
+            caption="Connect your Slack workspace to sync channels, users, and messages.",
             iconPath="/static/services/slack.png",
             betaSource=True,
             fields=cast(
@@ -86,16 +86,19 @@ class SlackSource(SimpleSource[SlackSourceConfig], OAuthMixin):
     def validate_credentials(
         self, config: SlackSourceConfig, team_id: int, schema_name: Optional[str] = None
     ) -> tuple[bool, str | None]:
-        integration = self.get_oauth_integration(config.slack_integration_id, team_id)
-        access_token = integration.access_token
+        try:
+            integration = self.get_oauth_integration(config.slack_integration_id, team_id)
+            access_token = integration.access_token
 
-        if not access_token:
-            return False, "Slack access token not found"
+            if not access_token:
+                return False, "Slack access token not found"
 
-        if validate_slack_credentials(access_token):
-            return True, None
+            if validate_slack_credentials(access_token):
+                return True, None
 
-        return False, "Invalid Slack credentials"
+            return False, "Invalid Slack credentials"
+        except Exception as e:
+            return False, f"Failed to validate Slack credentials: {str(e)}"
 
     def source_for_pipeline(self, config: SlackSourceConfig, inputs: SourceInputs) -> SourceResponse:
         integration = self.get_oauth_integration(config.slack_integration_id, inputs.team_id)
