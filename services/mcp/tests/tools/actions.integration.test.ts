@@ -64,7 +64,7 @@ describe('Actions', { concurrent: false }, () => {
             expect(actionData.id).toBeTruthy()
             expect(actionData.name).toBe(params.name)
             expect(actionData.description).toBe(params.description)
-            expect(actionData.url).toContain('/data-management/actions/')
+            expect(actionData._posthogUrl).toContain('/data-management/actions/')
 
             createdResources.actions.push(actionData.id)
         })
@@ -156,20 +156,20 @@ describe('Actions', { concurrent: false }, () => {
 
             // List actions
             const result = await getAllTool.handler(context, {})
-            const actions = parseToolResponse(result)
+            const response = parseToolResponse(result)
 
-            expect(Array.isArray(actions)).toBe(true)
-            expect(actions.some((a: { id: number }) => a.id === createdAction.id)).toBe(true)
+            expect(Array.isArray(response.results)).toBe(true)
+            expect(response.results.some((a: { id: number }) => a.id === createdAction.id)).toBe(true)
         })
 
         it('should support pagination', async () => {
             const result = await getAllTool.handler(context, {
                 data: { limit: 5, offset: 0 },
             })
-            const actions = parseToolResponse(result)
+            const response = parseToolResponse(result)
 
-            expect(Array.isArray(actions)).toBe(true)
-            expect(actions.length).toBeLessThanOrEqual(5)
+            expect(Array.isArray(response.results)).toBe(true)
+            expect(response.results.length).toBeLessThanOrEqual(5)
         })
     })
 
@@ -199,7 +199,7 @@ describe('Actions', { concurrent: false }, () => {
             expect(actionData.id).toBe(createdAction.id)
             expect(actionData.name).toBe(createdAction.name)
             expect(actionData.description).toBe('Test description for get')
-            expect(actionData.url).toContain('/data-management/actions/')
+            expect(actionData._posthogUrl).toContain('/data-management/actions/')
         })
     })
 
@@ -312,8 +312,8 @@ describe('Actions', { concurrent: false }, () => {
 
             // Verify it's no longer in the list
             const listResult = await getAllTool.handler(context, {})
-            const actions = parseToolResponse(listResult)
-            expect(actions.some((a: { id: number }) => a.id === createdAction.id)).toBe(false)
+            const listResponse = parseToolResponse(listResult)
+            expect(listResponse.results.some((a: { id: number }) => a.id === createdAction.id)).toBe(false)
         })
     })
 })
