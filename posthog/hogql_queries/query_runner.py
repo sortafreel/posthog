@@ -211,6 +211,19 @@ def get_query_runner(
     timings: Optional[HogQLTimings] = None,
     limit_context: Optional[LimitContext] = None,
     modifiers: Optional[HogQLQueryModifiers] = None,
+    request: Optional["Request"] = None,
+) -> "QueryRunner":
+    runner = _get_query_runner(query, team, timings, limit_context, modifiers)
+    runner.request = request
+    return runner
+
+
+def _get_query_runner(
+    query: dict[str, Any] | RunnableQueryNode | BaseModel,
+    team: Team,
+    timings: Optional[HogQLTimings] = None,
+    limit_context: Optional[LimitContext] = None,
+    modifiers: Optional[HogQLQueryModifiers] = None,
 ) -> "QueryRunner":
     try:
         kind = get_from_dict_or_attr(query, "kind")
@@ -884,10 +897,11 @@ def get_query_runner_or_none(
     timings: Optional[HogQLTimings] = None,
     limit_context: Optional[LimitContext] = None,
     modifiers: Optional[HogQLQueryModifiers] = None,
+    request: Optional["Request"] = None,
 ) -> Optional["QueryRunner"]:
     try:
         return get_query_runner(
-            query=query, team=team, timings=timings, limit_context=limit_context, modifiers=modifiers
+            query=query, team=team, timings=timings, limit_context=limit_context, modifiers=modifiers, request=request
         )
     except ValueError as e:
         if "Can't get a runner for an unknown" in str(e):
@@ -930,9 +944,11 @@ class QueryRunner(ABC, Generic[Q, R, CR]):
         workload: Workload = Workload.DEFAULT,
         extract_modifiers=lambda query: (query.modifiers if hasattr(query, "modifiers") else None),
         user: Optional[User] = None,
+        request: Optional["Request"] = None,
     ):
         self.team = team
         self.user = user
+        self.request = request
         self.timings = timings or HogQLTimings()
         self.limit_context = limit_context or LimitContext.QUERY
         self.query_id = query_id
@@ -1183,7 +1199,6 @@ class QueryRunner(ABC, Generic[Q, R, CR]):
         insight_id: Optional[int] = None,
         dashboard_id: Optional[int] = None,
         cache_age_seconds: Optional[int] = None,
-        request: Optional["Request"] = None,
     ) -> CR | CacheMissResponse | QueryStatusResponse:
         # Set user for access control during query execution
         if user is not None:
@@ -1295,7 +1310,7 @@ class QueryRunner(ABC, Generic[Q, R, CR]):
                         user=user,
                         team=self.team,
                         organization=self.team.organization,
-                        request=request,
+                        request=self.request,
                     )
 
                     return results
@@ -1371,7 +1386,7 @@ class QueryRunner(ABC, Generic[Q, R, CR]):
                 user=user,
                 team=self.team,
                 organization=self.team.organization,
-                request=request,
+                request=self.request,
             )
 
             return CachedResponse(**fresh_response_dict)
