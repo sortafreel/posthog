@@ -128,6 +128,7 @@ def get_scoped_models() -> tuple[dict[str, set[str]], set[str]]:
         "CodeInviteRedemption",
         "EndpointVersion",
         "ErrorTrackingIssueAssignment",
+        "FeatureFlagEvaluationContext",
         "TicketAssignment",
         # --- Internal config / OneToOne settings ---
         "DuckLakeCatalog",
