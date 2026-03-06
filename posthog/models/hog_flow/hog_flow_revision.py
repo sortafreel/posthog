@@ -67,9 +67,5 @@ class HogFlowRevision(UUIDTModel):
 
     billable_action_types = models.JSONField(default=list, null=True, blank=True)
 
-    # IDs of soft-deleted actions in this draft; used by the frontend
-    # to render ghost nodes that survive page refresh.
-    deleted_action_ids = models.JSONField(default=list, blank=True)
-
     def __str__(self):
         return f"HogFlowRevision {self.hog_flow_id}/v{self.version} ({self.status})"
