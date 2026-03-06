@@ -163,6 +163,11 @@ export interface TaskRunCreateRequestApi {
 * `interactive` - interactive
 * `background` - background */
     mode?: TaskRunCreateRequestModeEnumApi
+    /**
+     * Git branch to checkout in the sandbox
+     * @nullable
+     */
+    branch?: string | null
 }
 
 /**

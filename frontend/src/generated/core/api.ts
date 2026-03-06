@@ -1803,6 +1803,21 @@ export const integrationsEmailVerifyCreate = async (
     })
 }
 
+export const getIntegrationsGithubBranchesRetrieveUrl = (projectId: string, id: number) => {
+    return `/api/projects/${projectId}/integrations/${id}/github_branches/`
+}
+
+export const integrationsGithubBranchesRetrieve = async (
+    projectId: string,
+    id: number,
+    options?: RequestInit
+): Promise<void> => {
+    return apiMutator<void>(getIntegrationsGithubBranchesRetrieveUrl(projectId, id), {
+        ...options,
+        method: 'GET',
+    })
+}
+
 export const getIntegrationsGithubReposRetrieveUrl = (projectId: string, id: number) => {
     return `/api/projects/${projectId}/integrations/${id}/github_repos/`
 }
