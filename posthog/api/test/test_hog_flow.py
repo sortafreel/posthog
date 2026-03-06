@@ -1518,18 +1518,6 @@ class TestHogFlowRevisionAPI(APIBaseTest):
         assert draft_rev.name == "First Edit"
         assert draft_rev.description == "Added desc"
 
-    def test_save_draft_persists_deleted_action_ids(self):
-        flow_id = self._create_active_flow()
-        response = self.client.patch(
-            f"/api/projects/{self.team.id}/hog_flows/{flow_id}/draft",
-            {"name": "With Deletes", "deleted_action_ids": ["action_1"]},
-        )
-        assert response.status_code == 200, response.json()
-        assert response.json()["draft"]["deleted_action_ids"] == ["action_1"]
-
-        draft_rev = HogFlowRevision.objects.get(hog_flow_id=flow_id, status=HogFlowRevision.State.DRAFT)
-        assert draft_rev.deleted_action_ids == ["action_1"]
-
     def test_save_draft_rejected_on_draft_flow(self):
         flow_id = self._create_draft_flow()
         response = self.client.patch(

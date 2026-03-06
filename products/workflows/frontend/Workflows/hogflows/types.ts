@@ -80,7 +80,6 @@ export interface HogFlowDraft {
     conversion?: z.infer<typeof HogFlowSchema>['conversion']
     exit_condition?: z.infer<typeof HogFlowSchema>['exit_condition']
     variables?: z.infer<typeof HogFlowSchema>['variables']
-    deleted_action_ids?: string[]
     updated_at?: string | null
 }
 

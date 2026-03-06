@@ -142,6 +142,27 @@ export function stripDeletedActions(
     return { actions: remainingActions, edges: remainingEdges }
 }
 
+function hydrateDraftForDisplay(
+    originalWorkflow: HogFlow,
+    draftContent: Partial<HogFlow>
+): { actions: HogFlowAction[]; edges: HogFlowEdge[] } {
+    const originalActionIds = new Set(originalWorkflow.actions.map((a) => a.id))
+
+    // New actions: in draft but not in original
+    const newActions = (draftContent.actions ?? []).filter((a) => !originalActionIds.has(a.id))
+    const newActionIds = new Set(newActions.map((a) => a.id))
+    // Merge: all original actions (ghost nodes stay) + new draft-only actions
+    const mergedActions = [...originalWorkflow.actions, ...newActions] as HogFlowAction[]
+
+    // Original edges as base (keeps ghost node connections).
+    // Only add draft edges that involve new (draft-only) nodes — skip re-wired edges
+    // between original nodes (those are artifacts of stripping ghost nodes).
+    const newEdges = (draftContent.edges ?? []).filter((e: any) => newActionIds.has(e.from) || newActionIds.has(e.to))
+    const mergedEdges = [...originalWorkflow.edges, ...newEdges] as HogFlowEdge[]
+
+    return { actions: mergedActions, edges: mergedEdges }
+}
+
 export const workflowLogic = kea<workflowLogicType>([
     path(['products', 'workflows', 'frontend', 'Workflows', 'workflowLogic']),
     props({ id: 'new', tabId: 'default' } as WorkflowLogicProps),
@@ -234,11 +255,16 @@ export const workflowLogic = kea<workflowLogicType>([
 
                     // Active workflows: save content changes as a draft revision
                     if (values.originalWorkflow?.status === 'active') {
-                        const draftPayload = {
+                        const stripped = stripDeletedActions(
+                            updates.actions,
+                            updates.edges,
+                            values.localDeletedActionIds
+                        )
+                        return api.hogFlows.saveDraft(props.id, {
                             ...updates,
-                            deleted_action_ids: [...values.localDeletedActionIds],
-                        }
-                        return api.hogFlows.saveDraft(props.id, draftPayload)
+                            actions: stripped.actions,
+                            edges: stripped.edges,
+                        })
                     }
 
                     return api.hogFlows.updateHogFlow(props.id, updates)
@@ -304,10 +330,20 @@ export const workflowLogic = kea<workflowLogicType>([
                     next.delete(actionId)
                     return next
                 },
-                loadWorkflowSuccess: (_, { originalWorkflow }) =>
-                    new Set(originalWorkflow?.draft?.deleted_action_ids ?? []),
-                saveWorkflowSuccess: (_, { originalWorkflow }) =>
-                    new Set(originalWorkflow?.draft?.deleted_action_ids ?? []),
+                loadWorkflowSuccess: (_, { originalWorkflow }) => {
+                    if (!originalWorkflow?.draft || originalWorkflow.status !== 'active') {
+                        return new Set<string>()
+                    }
+                    const draftActionIds = new Set((originalWorkflow.draft.actions ?? []).map((a: any) => a.id))
+                    return new Set(originalWorkflow.actions.filter((a) => !draftActionIds.has(a.id)).map((a) => a.id))
+                },
+                saveWorkflowSuccess: (_, { originalWorkflow }) => {
+                    if (!originalWorkflow?.draft || originalWorkflow.status !== 'active') {
+                        return new Set<string>()
+                    }
+                    const draftActionIds = new Set((originalWorkflow.draft.actions ?? []).map((a: any) => a.id))
+                    return new Set(originalWorkflow.actions.filter((a) => !draftActionIds.has(a.id)).map((a) => a.id))
+                },
                 // eslint-disable-next-line @typescript-eslint/no-unused-vars
                 discardDraft: (_state) => new Set<string>(),
             },
@@ -319,7 +355,13 @@ export const workflowLogic = kea<workflowLogicType>([
         hasLocalDraftChanges: [
             (s) => [s.localDeletedActionIds, s.originalWorkflow],
             (localDeletedActionIds, originalWorkflow): boolean => {
-                const serverDeletedIds = new Set(originalWorkflow?.draft?.deleted_action_ids ?? [])
+                if (!originalWorkflow?.draft || originalWorkflow.status !== 'active') {
+                    return localDeletedActionIds.size > 0
+                }
+                const draftActionIds = new Set((originalWorkflow.draft.actions ?? []).map((a: any) => a.id))
+                const serverDeletedIds = new Set(
+                    originalWorkflow.actions.filter((a) => !draftActionIds.has(a.id)).map((a) => a.id)
+                )
                 if (localDeletedActionIds.size !== serverDeletedIds.size) {
                     return true
                 }
@@ -534,9 +576,13 @@ export const workflowLogic = kea<workflowLogicType>([
         },
         loadWorkflowSuccess: async ({ originalWorkflow }) => {
             if (originalWorkflow?.draft && originalWorkflow.status === 'active') {
-                // Hydrate the form with draft content while keeping identity from the live record
                 const { updated_at: _draftUpdatedAt, ...draftContent } = originalWorkflow.draft
-                actions.resetWorkflow({ ...originalWorkflow, ...draftContent, draft: originalWorkflow.draft })
+                actions.resetWorkflow({
+                    ...originalWorkflow,
+                    ...draftContent,
+                    ...hydrateDraftForDisplay(originalWorkflow, draftContent),
+                    draft: originalWorkflow.draft,
+                })
             } else {
                 actions.resetWorkflow(originalWorkflow)
             }
@@ -587,8 +633,9 @@ export const workflowLogic = kea<workflowLogicType>([
             }
 
             if (originalWorkflow?.draft && originalWorkflow.status === 'active') {
-                const { updated_at: _draftUpdatedAt, ...draftContent } = originalWorkflow.draft
-                actions.resetWorkflow({ ...originalWorkflow, ...draftContent, draft: originalWorkflow.draft })
+                // Draft save: don't reset the form — it already has the correct state.
+                // Just reset with current form values so kea-forms marks it as unchanged.
+                actions.resetWorkflow(values.workflow)
             } else {
                 actions.resetWorkflow(originalWorkflow)
             }
@@ -598,17 +645,6 @@ export const workflowLogic = kea<workflowLogicType>([
                 return
             }
             try {
-                // If there are soft-deleted actions, save a clean draft first with them stripped out
-                if (values.localDeletedActionIds.size > 0) {
-                    const workflow = sanitizeWorkflow({ ...values.workflow }, values.hogFunctionTemplatesById)
-                    const stripped = stripDeletedActions(workflow.actions, workflow.edges, values.localDeletedActionIds)
-                    await api.hogFlows.saveDraft(props.id, {
-                        ...workflow,
-                        actions: stripped.actions,
-                        edges: stripped.edges,
-                        deleted_action_ids: [],
-                    })
-                }
                 const result = await api.hogFlows.publishDraft(props.id)
                 lemonToast.success('Changes published')
                 actions.loadWorkflowSuccess(result)

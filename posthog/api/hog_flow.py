@@ -80,43 +80,8 @@ def _build_draft_response(draft_revision: HogFlowRevision) -> dict:
     draft_data: dict = {}
     for field in CONTENT_FIELDS:
         draft_data[field] = getattr(draft_revision, field)
-    if draft_revision.deleted_action_ids:
-        draft_data["deleted_action_ids"] = draft_revision.deleted_action_ids
     draft_data["updated_at"] = draft_revision.updated_at.isoformat() if draft_revision.updated_at else None
     return draft_data
-
-
-BRANCHING_ACTION_TYPES = {"conditional_branch", "random_cohort_branch", "wait_until_condition"}
-
-
-def _strip_deleted_actions(
-    actions: list[dict], edges: list[dict], deleted_ids: set[str]
-) -> tuple[list[dict], list[dict]]:
-    """Remove soft-deleted actions and re-wire edges. Process leaf nodes first, then branching parents."""
-    remaining_actions = list(actions)
-    remaining_edges = list(edges)
-
-    # Sort: leaf (non-branching) nodes first so their edges get re-wired before parent branches are removed
-    sorted_ids = sorted(
-        deleted_ids,
-        key=lambda aid: 1
-        if any(a.get("type") in BRANCHING_ACTION_TYPES for a in remaining_actions if a.get("id") == aid)
-        else 0,
-    )
-
-    for action_id in sorted_ids:
-        # Find the outgoing continue edge from this node
-        outgoing = next(
-            (e for e in remaining_edges if e.get("from") == action_id and e.get("type") == "continue"), None
-        )
-        if outgoing:
-            # Re-wire: any edge pointing TO this node should now point to this node's successor
-            remaining_edges = [{**e, "to": outgoing["to"]} if e.get("to") == action_id else e for e in remaining_edges]
-        # Remove all edges from/to this node
-        remaining_edges = [e for e in remaining_edges if e.get("from") != action_id and e.get("to") != action_id]
-        remaining_actions = [a for a in remaining_actions if a.get("id") != action_id]
-
-    return remaining_actions, remaining_edges
 
 
 class HogFlowConfigFunctionInputsSerializer(serializers.Serializer):
@@ -473,7 +438,6 @@ class HogFlowDraftSerializer(serializers.Serializer):
     conversion = serializers.JSONField(required=False, allow_null=True)
     exit_condition = serializers.ChoiceField(choices=HogFlow.ExitCondition.choices, required=False)
     variables = HogFlowVariableSerializer(required=False)
-    deleted_action_ids = serializers.ListField(child=serializers.CharField(), required=False)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -682,14 +646,11 @@ class HogFlowViewSet(TeamAndOrgViewSetMixin, LogEntryMixin, AppMetricsMixin, vie
         serializer.is_valid(raise_exception=True)
         draft_data = serializer.validated_data
 
-        deleted_action_ids = draft_data.pop("deleted_action_ids", [])
-
         draft_revision = _get_draft_revision(hog_flow)
 
         if draft_revision:
             for key, value in draft_data.items():
                 setattr(draft_revision, key, value)
-            draft_revision.deleted_action_ids = deleted_action_ids
             draft_revision.save()
         else:
             # Create new draft revision as copy of active, then overlay changes
@@ -704,7 +665,6 @@ class HogFlowViewSet(TeamAndOrgViewSetMixin, LogEntryMixin, AppMetricsMixin, vie
                 setattr(draft_revision, field, getattr(source, field))
             for key, value in draft_data.items():
                 setattr(draft_revision, key, value)
-            draft_revision.deleted_action_ids = deleted_action_ids
             draft_revision.save()
 
         hog_flow.refresh_from_db()
@@ -717,15 +677,6 @@ class HogFlowViewSet(TeamAndOrgViewSetMixin, LogEntryMixin, AppMetricsMixin, vie
 
         if not draft_revision:
             raise exceptions.ValidationError("No draft to publish.")
-
-        # Strip soft-deleted actions: re-wire edges then remove
-        deleted_ids = set(draft_revision.deleted_action_ids or [])
-        if deleted_ids:
-            actions_list = list(draft_revision.actions or [])
-            edges_list = list(draft_revision.edges or [])
-            actions_list, edges_list = _strip_deleted_actions(actions_list, edges_list, deleted_ids)
-            draft_revision.actions = actions_list
-            draft_revision.edges = edges_list
 
         # Validate draft content through the full serializer (strict, non-draft validation)
         validation_data = {}
@@ -752,9 +703,8 @@ class HogFlowViewSet(TeamAndOrgViewSetMixin, LogEntryMixin, AppMetricsMixin, vie
             old_active.status = HogFlowRevision.State.ARCHIVED
             old_active.save(update_fields=["status"])
 
-        # Promote draft revision to active, clear deleted_action_ids
+        # Promote draft revision to active
         draft_revision.status = HogFlowRevision.State.ACTIVE
-        draft_revision.deleted_action_ids = []
         for field in CONTENT_FIELDS:
             setattr(draft_revision, field, getattr(hog_flow, field))
         draft_revision.save()
