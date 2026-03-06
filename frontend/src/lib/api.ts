@@ -3827,6 +3827,10 @@ const api = {
             )
         },
 
+        async summaryStatus(recordingId: SessionRecordingType['id']): Promise<{ exists: boolean }> {
+            return await new ApiRequest().recording(recordingId).withAction('summary_status').get()
+        },
+
         async similarRecordings(recordingId: SessionRecordingType['id']): Promise<[string, number][]> {
             return await new ApiRequest().recording(recordingId).withAction('similar_sessions').get()
         },

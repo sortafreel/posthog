@@ -697,7 +697,7 @@ function LoadSessionSummaryButton(): JSX.Element {
 
 export function PlayerSidebarSessionSummary(): JSX.Element | null {
     const { logicProps } = useValues(sessionRecordingPlayerLogic)
-    const { sessionSummary, sessionSummaryLoading } = useValues(playerMetaLogic(logicProps))
+    const { sessionSummary, sessionSummaryLoading, sessionSummaryExists } = useValues(playerMetaLogic(logicProps))
 
     return (
         <div className="rounded border bg-surface-primary px-2 py-1">
@@ -714,6 +714,11 @@ export function PlayerSidebarSessionSummary(): JSX.Element | null {
                 </>
             ) : sessionSummary ? (
                 <SessionSummary />
+            ) : sessionSummaryExists === null ? (
+                <div className="flex items-center gap-2 py-2">
+                    <Spinner className="text-muted" />
+                    <span className="text-muted">Checking for existing summary...</span>
+                </div>
             ) : (
                 <LoadSessionSummaryButton />
             )}

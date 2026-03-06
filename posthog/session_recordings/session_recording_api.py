@@ -1313,6 +1313,22 @@ class SessionRecordingViewSet(
                 content_type=ServerSentEventRenderer.media_type,
             )
 
+    @extend_schema(exclude=True)
+    @action(methods=["GET"], detail=True, url_path="summary_status")
+    def summary_status(self, request: request.Request, **kwargs):
+        if not request.user.is_authenticated:
+            raise exceptions.NotAuthenticated()
+
+        from ee.models.session_summaries import SingleSessionSummary
+
+        recording = self.get_object()
+        session_id = str(recording.session_id)
+        summary = SingleSessionSummary.objects.get_summary(
+            team_id=self.team.pk,
+            session_id=session_id,
+        )
+        return Response({"exists": summary is not None})
+
     async def _stream_lts_blob_v2_to_client_async(
         self,
         blob_key: str,

@@ -133,6 +133,8 @@ export const playerMetaLogic = kea<playerMetaLogicType>([
         summarizeSession: () => ({}),
         setSessionSummaryLoading: (isLoading: boolean) => ({ isLoading }),
         setIsPropertyPopoverOpen: (isOpen: boolean) => ({ isOpen }),
+        checkAndLoadSummary: true,
+        setSessionSummaryExists: (exists: boolean) => ({ exists }),
     }),
     reducers(() => ({
         summaryHasHadFeedback: [
@@ -159,6 +161,13 @@ export const playerMetaLogic = kea<playerMetaLogicType>([
             false,
             {
                 setIsPropertyPopoverOpen: (_, { isOpen }) => isOpen,
+            },
+        ],
+        sessionSummaryExists: [
+            null as boolean | null,
+            {
+                setSessionSummaryExists: (_, { exists }) => exists,
+                setSessionSummaryContent: () => true,
             },
         ],
     })),
@@ -396,6 +405,23 @@ export const playerMetaLogic = kea<playerMetaLogicType>([
         loadRecordingMetaSuccess: () => {
             if (values.sessionPlayerMetaData) {
                 actions.maybeLoadPropertiesForSessions([values.sessionPlayerMetaData])
+            }
+            actions.checkAndLoadSummary()
+        },
+        checkAndLoadSummary: async () => {
+            const id = props.sessionRecordingId || props.sessionRecordingData?.sessionRecordingId
+            if (!id || values.sessionSummary || values.sessionSummaryLoading) {
+                return
+            }
+            try {
+                const { exists } = await api.recordings.summaryStatus(id)
+                actions.setSessionSummaryExists(exists)
+                if (exists) {
+                    actions.summarizeSession()
+                }
+            } catch {
+                // Silently fail - show the manual button instead
+                actions.setSessionSummaryExists(false)
             }
         },
         sessionSummaryFeedback: ({ feedback }) => {
