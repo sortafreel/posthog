@@ -122,12 +122,12 @@ class TestProxyHeaderAllowlist(BaseTest):
 
 
 class TestShouldProxyBearerLookup(BaseTest):
-    @patch("ee.api.stripe_provisioning.region_proxy.find_oauth_access_token", return_value=None)
+    @patch("ee.api.agentic_provisioning.region_proxy.find_oauth_access_token", return_value=None)
     def test_proxies_when_token_not_in_db(self, mock_find):
         request = _make_drf_request(bearer_token="unknown_token")
         assert _should_proxy_bearer_lookup(request, "US") is True
 
-    @patch("ee.api.stripe_provisioning.region_proxy.find_oauth_access_token")
+    @patch("ee.api.agentic_provisioning.region_proxy.find_oauth_access_token")
     def test_skips_when_token_in_db(self, mock_find):
         mock_find.return_value = MagicMock()
         request = _make_drf_request(bearer_token="known_token")
@@ -196,8 +196,8 @@ class TestDecoratorIntegration(StripeProvisioningTestBase):
         assert res.json()["type"] == "oauth"
 
     @override_settings(CLOUD_DEPLOYMENT="US")
-    @patch("ee.api.stripe_provisioning.region_proxy._proxy_to_region")
-    @patch("ee.api.stripe_provisioning.region_proxy.find_oauth_access_token", return_value=None)
+    @patch("ee.api.agentic_provisioning.region_proxy._proxy_to_region")
+    @patch("ee.api.agentic_provisioning.region_proxy.find_oauth_access_token", return_value=None)
     def test_bearer_proxy_failure_falls_through(self, mock_find, mock_proxy):
         import requests as req_lib
 
