@@ -10,6 +10,7 @@ from asgiref.sync import sync_to_async
 from posthog.models.team.team import Team
 from posthog.tasks.test.test_usage_report import freeze_time
 from posthog.temporal.data_imports.settings import import_data_activity_sync
+from posthog.temporal.data_imports.sources.postgres import source as postgres_source_module
 from posthog.temporal.data_imports.workflow_activities.import_data_sync import ImportDataActivityInputs
 
 from products.data_warehouse.backend.models.credential import DataWarehouseCredential
@@ -79,7 +80,7 @@ async def test_job_inputs_with_whitespace(activity_environment, team, **kwargs):
     activity_inputs = await _setup(team, job_inputs)
 
     with (
-        mock.patch("posthog.temporal.data_imports.sources.postgres.source.postgres_source") as mock_postgres_source,
+        mock.patch.object(postgres_source_module, "postgres_source") as mock_postgres_source,
         mock.patch("posthog.temporal.data_imports.workflow_activities.import_data_sync._run"),
         mock.patch("posthog.temporal.data_imports.sources.common.mixins._is_host_safe", return_value=(True, None)),
     ):
@@ -119,7 +120,7 @@ async def test_postgres_source_without_ssh_tunnel(activity_environment, team, **
     activity_inputs = await _setup(team, job_inputs)
 
     with (
-        mock.patch("posthog.temporal.data_imports.sources.postgres.source.postgres_source") as mock_postgres_source,
+        mock.patch.object(postgres_source_module, "postgres_source") as mock_postgres_source,
         mock.patch("posthog.temporal.data_imports.workflow_activities.import_data_sync._run"),
         mock.patch("posthog.temporal.data_imports.sources.common.mixins._is_host_safe", return_value=(True, None)),
     ):
@@ -171,7 +172,7 @@ async def test_postgres_source_with_ssh_tunnel_disabled(activity_environment, te
     activity_inputs = await _setup(team, job_inputs)
 
     with (
-        mock.patch("posthog.temporal.data_imports.sources.postgres.source.postgres_source") as mock_postgres_source,
+        mock.patch.object(postgres_source_module, "postgres_source") as mock_postgres_source,
         mock.patch("posthog.temporal.data_imports.workflow_activities.import_data_sync._run"),
         mock.patch("posthog.temporal.data_imports.sources.common.mixins._is_host_safe", return_value=(True, None)),
     ):
@@ -237,7 +238,7 @@ async def test_postgres_source_with_ssh_tunnel_enabled(activity_environment, tea
         return MockedTunnel()
 
     with (
-        mock.patch("posthog.temporal.data_imports.sources.postgres.source.postgres_source") as mock_postgres_source,
+        mock.patch.object(postgres_source_module, "postgres_source") as mock_postgres_source,
         mock.patch("posthog.temporal.data_imports.workflow_activities.import_data_sync._run"),
         mock.patch.object(SSHTunnel, "get_tunnel", mock_get_tunnel),
         mock.patch("posthog.temporal.data_imports.sources.common.mixins._is_host_safe", return_value=(True, None)),
