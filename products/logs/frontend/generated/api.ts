@@ -32,6 +32,21 @@ export const logsExplainLogWithAICreate = async (
     })
 }
 
+export const getDomainsScimLogsRetrieveUrl = (organizationId: string, id: string) => {
+    return `/api/organizations/${organizationId}/domains/${id}/scim/logs/`
+}
+
+export const domainsScimLogsRetrieve = async (
+    organizationId: string,
+    id: string,
+    options?: RequestInit
+): Promise<void> => {
+    return apiMutator<void>(getDomainsScimLogsRetrieveUrl(organizationId, id), {
+        ...options,
+        method: 'GET',
+    })
+}
+
 export const getHogFlowTemplatesLogsRetrieveUrl = (projectId: string, id: string) => {
     return `/api/projects/${projectId}/hog_flow_templates/${id}/logs/`
 }
