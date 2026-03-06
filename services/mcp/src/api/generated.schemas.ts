@@ -1499,9 +1499,25 @@ export interface PropertyGroupFilter {
     values: PropertyGroupFilterValue[]
 }
 
+export interface BoxPlotDatum {
+    day: string
+    label: string
+    max: number
+    mean: number
+    median: number
+    min: number
+    p25: number
+    p75: number
+}
+
 export type TrendsQueryResponseResultsItem = { [key: string]: unknown }
 
 export interface TrendsQueryResponse {
+    /**
+     * Box plot data when display type is BoxPlot
+     * @nullable
+     */
+    boxplot_data?: BoxPlotDatum[] | null
     /**
      * Query error. Returned only if 'explain' or `modifiers.debug` is true. Throws an error otherwise.
      * @nullable
@@ -1873,6 +1889,7 @@ export const AggregationAxisFormat = {
     Percentage: 'percentage',
     PercentageScaled: 'percentage_scaled',
     Currency: 'currency',
+    Short: 'short',
 } as const
 
 export type DetailedResultsAggregationType =
@@ -1901,6 +1918,7 @@ export const ChartDisplayType = {
     WorldMap: 'WorldMap',
     CalendarHeatmap: 'CalendarHeatmap',
     TwoDimensionalHeatmap: 'TwoDimensionalHeatmap',
+    BoxPlot: 'BoxPlot',
 } as const
 
 export interface TrendsFormulaNode {
@@ -4301,6 +4319,27 @@ export interface ApprovalPolicy {
     readonly updated_at: string | null
 }
 
+export interface ApproveSnapshotInput {
+    identifier: string
+    new_hash: string
+}
+
+export interface ApproveRunRequestInput {
+    snapshots: ApproveSnapshotInput[]
+    commit_to_github?: boolean
+}
+
+export interface Artifact {
+    id: string
+    content_hash: string
+    /** @nullable */
+    width: number | null
+    /** @nullable */
+    height: number | null
+    /** @nullable */
+    download_url: string | null
+}
+
 /**
  * * `first_touch` - First Touch
  * `last_touch` - Last Touch
@@ -4311,6 +4350,43 @@ export const AttributionModeEnum = {
     FirstTouch: 'first_touch',
     LastTouch: 'last_touch',
 } as const
+
+export interface RunSummary {
+    total: number
+    changed: number
+    new: number
+    removed: number
+    unchanged: number
+}
+
+export type RunMetadata = { [key: string]: unknown }
+
+export interface Run {
+    id: string
+    repo_id: string
+    status: string
+    run_type: string
+    commit_sha: string
+    branch: string
+    /** @nullable */
+    pr_number: number | null
+    approved: boolean
+    /** @nullable */
+    approved_at: string | null
+    summary: RunSummary
+    /** @nullable */
+    error_message: string | null
+    created_at: string
+    /** @nullable */
+    completed_at: string | null
+    is_stale?: boolean
+    metadata?: RunMetadata
+}
+
+export interface AutoApproveResult {
+    run: Run
+    baseline_content: string
+}
 
 export type AutocompleteCompletionItemKind =
     (typeof AutocompleteCompletionItemKind)[keyof typeof AutocompleteCompletionItemKind]
@@ -5692,6 +5768,7 @@ export type Style = (typeof Style)[keyof typeof Style]
 export const Style = {
     None: 'none',
     Number: 'number',
+    Short: 'short',
     Percent: 'percent',
 } as const
 
@@ -6780,6 +6857,53 @@ export interface CreateRecordingResponse {
     readonly updated_at: string
     /** Recall.ai upload token for the desktop SDK */
     upload_token: string
+}
+
+export interface CreateRepoInput {
+    repo_full_name: string
+    /** @nullable */
+    repo_external_id?: number | null
+}
+
+export type CreateRunInputBaselineHashes = { [key: string]: string }
+
+export type CreateRunInputMetadata = { [key: string]: unknown }
+
+export type SnapshotManifestItemMetadata = { [key: string]: unknown }
+
+export interface SnapshotManifestItem {
+    identifier: string
+    content_hash: string
+    /** @nullable */
+    width?: number | null
+    /** @nullable */
+    height?: number | null
+    metadata?: SnapshotManifestItemMetadata
+}
+
+export interface CreateRunInput {
+    repo_id: string
+    run_type: string
+    commit_sha: string
+    branch: string
+    snapshots: SnapshotManifestItem[]
+    /** @nullable */
+    pr_number?: number | null
+    baseline_hashes?: CreateRunInputBaselineHashes
+    metadata?: CreateRunInputMetadata
+}
+
+export type UploadTargetFields = { [key: string]: string }
+
+export interface UploadTarget {
+    content_hash: string
+    url: string
+    fields: UploadTargetFields
+}
+
+export interface CreateRunResult {
+    run_id: string
+    uploads: UploadTarget[]
 }
 
 /**
@@ -7928,8 +8052,6 @@ export interface ErrorTrackingIssue {
     library?: string | null
     /** @nullable */
     name?: string | null
-    /** @nullable */
-    revenue?: number | null
     /** @nullable */
     source?: string | null
     status: ErrorTrackingIssueStatus
@@ -9994,7 +10116,6 @@ export const OrderBy1 = {
     Occurrences: 'occurrences',
     Users: 'users',
     Sessions: 'sessions',
-    Revenue: 'revenue',
 } as const
 
 export type OrderDirection1 = (typeof OrderDirection1)[keyof typeof OrderDirection1]
@@ -10037,24 +10158,6 @@ export interface ErrorTrackingQueryResponse {
     timings?: QueryTiming[] | null
 }
 
-export type RevenueEntity = (typeof RevenueEntity)[keyof typeof RevenueEntity]
-
-export const RevenueEntity = {
-    Person: 'person',
-    Group0: 'group_0',
-    Group1: 'group_1',
-    Group2: 'group_2',
-    Group3: 'group_3',
-    Group4: 'group_4',
-} as const
-
-export type RevenuePeriod = (typeof RevenuePeriod)[keyof typeof RevenuePeriod]
-
-export const RevenuePeriod = {
-    AllTime: 'all_time',
-    Mrr: 'mrr',
-} as const
-
 export interface ErrorTrackingQuery {
     assignee?: ErrorTrackingIssueAssignee | null
     dateRange: DateRange
@@ -10079,8 +10182,6 @@ export interface ErrorTrackingQuery {
     /** @nullable */
     personId?: string | null
     response?: ErrorTrackingQueryResponse | null
-    revenueEntity?: RevenueEntity | null
-    revenuePeriod?: RevenuePeriod | null
     /** @nullable */
     searchQuery?: string | null
     status?: ErrorTrackingIssueStatus | string | null
@@ -14084,23 +14185,14 @@ export interface GenerateResponse {
     steps: GenerateStepResponse[]
 }
 
-export type GenerationSentimentScores = { [key: string]: number }
-
-export type MessageSentimentScores = { [key: string]: number }
-
-export interface MessageSentiment {
-    label: string
-    score: number
-    scores: MessageSentimentScores
+export interface GitHubRepo {
+    id: number
+    name: string
+    full_name: string
 }
 
-export type GenerationSentimentMessages = { [key: string]: MessageSentiment }
-
-export interface GenerationSentiment {
-    label: string
-    score: number
-    scores: GenerationSentimentScores
-    messages: GenerationSentimentMessages
+export interface GitHubReposResponse {
+    repositories: GitHubRepo[]
 }
 
 export interface Group {
@@ -14384,9 +14476,6 @@ export interface HogFlow {
     readonly abort_action: string | null
     variables?: HogFlowVariablesItem[]
     readonly billable_action_types: unknown | null
-    readonly draft: unknown | null
-    /** @nullable */
-    readonly draft_updated_at: string | null
 }
 
 export interface HogFlowMinimal {
@@ -14409,9 +14498,6 @@ export interface HogFlowMinimal {
     readonly abort_action: string | null
     readonly variables: unknown | null
     readonly billable_action_types: unknown | null
-    readonly draft: unknown | null
-    /** @nullable */
-    readonly draft_updated_at: string | null
 }
 
 export type HogFlowTemplateVariablesItem = { [key: string]: string }
@@ -16423,7 +16509,39 @@ export interface LLMPrompt {
     readonly created_by: UserBasic
     readonly created_at: string
     readonly updated_at: string
-    deleted?: boolean
+    readonly deleted: boolean
+    readonly is_latest: boolean
+    readonly latest_version: number
+    readonly version_count: number
+    readonly first_version_created_at: string
+}
+
+export interface LLMPromptPublic {
+    id: string
+    name: string
+    prompt: unknown
+    version: number
+    created_at: string
+    updated_at: string
+    deleted: boolean
+    is_latest: boolean
+    latest_version: number
+    version_count: number
+    first_version_created_at: string
+}
+
+export interface LLMPromptVersionSummary {
+    readonly id: string
+    readonly version: number
+    readonly created_by: UserBasic
+    readonly created_at: string
+    readonly is_latest: boolean
+}
+
+export interface LLMPromptResolveResponse {
+    prompt: LLMPrompt
+    versions: LLMPromptVersionSummary[]
+    has_more: boolean
 }
 
 /**
@@ -16655,6 +16773,14 @@ export interface MessageCategory {
 export interface MessageMinimal {
     /** @maxLength 10000 */
     content: string
+}
+
+export type MessageSentimentScores = { [key: string]: number }
+
+export interface MessageSentiment {
+    label: string
+    score: number
+    scores: MessageSentimentScores
 }
 
 export interface MessageTemplateContent {
@@ -18159,6 +18285,26 @@ export interface PaginatedRecommendedServerList {
     results: RecommendedServer[]
 }
 
+export type RepoBaselineFilePaths = { [key: string]: string }
+
+export interface Repo {
+    id: string
+    team_id: number
+    repo_external_id: number
+    repo_full_name: string
+    baseline_file_paths: RepoBaselineFilePaths
+    created_at: string
+}
+
+export interface PaginatedRepoList {
+    count: number
+    /** @nullable */
+    next?: string | null
+    /** @nullable */
+    previous?: string | null
+    results: Repo[]
+}
+
 export interface Role {
     readonly id: string
     /** @maxLength 200 */
@@ -18195,6 +18341,15 @@ export interface PaginatedRoleMembershipList {
     /** @nullable */
     previous?: string | null
     results: RoleMembership[]
+}
+
+export interface PaginatedRunList {
+    count: number
+    /** @nullable */
+    next?: string | null
+    /** @nullable */
+    previous?: string | null
+    results: Run[]
 }
 
 /**
@@ -18432,6 +18587,52 @@ export interface PaginatedSignalSourceConfigList {
     /** @nullable */
     previous?: string | null
     results: SignalSourceConfig[]
+}
+
+export interface SnapshotHistoryEntry {
+    run_id: string
+    result: string
+    branch: string
+    commit_sha: string
+    created_at: string
+}
+
+export interface PaginatedSnapshotHistoryEntryList {
+    count: number
+    /** @nullable */
+    next?: string | null
+    /** @nullable */
+    previous?: string | null
+    results: SnapshotHistoryEntry[]
+}
+
+export type SnapshotMetadata = { [key: string]: unknown }
+
+export interface Snapshot {
+    current_artifact?: Artifact | null
+    baseline_artifact?: Artifact | null
+    diff_artifact?: Artifact | null
+    id: string
+    identifier: string
+    result: string
+    /** @nullable */
+    diff_percentage: number | null
+    /** @nullable */
+    diff_pixel_count: number | null
+    review_state: string
+    /** @nullable */
+    reviewed_at: string | null
+    approved_hash: string
+    metadata?: SnapshotMetadata
+}
+
+export interface PaginatedSnapshotList {
+    count: number
+    /** @nullable */
+    next?: string | null
+    /** @nullable */
+    previous?: string | null
+    results: Snapshot[]
 }
 
 /**
@@ -19007,6 +19208,9 @@ export interface TicketPerson {
     readonly is_identified: boolean
 }
 
+/**
+ * Serializer mixin that handles tags for objects.
+ */
 export interface Ticket {
     readonly id: string
     readonly ticket_number: number
@@ -19040,6 +19244,7 @@ export interface Ticket {
     /** @nullable */
     readonly slack_team_id: string | null
     readonly person: TicketPerson | null
+    tags?: unknown[]
 }
 
 export interface PaginatedTicketList {
@@ -20611,9 +20816,6 @@ export interface PatchedHogFlow {
     readonly abort_action?: string | null
     variables?: PatchedHogFlowVariablesItem[]
     readonly billable_action_types?: unknown | null
-    readonly draft?: unknown | null
-    /** @nullable */
-    readonly draft_updated_at?: string | null
 }
 
 export type PatchedHogFlowTemplateVariablesItem = { [key: string]: string }
@@ -20807,16 +21009,10 @@ export interface PatchedIntegration {
     readonly display_name?: string
 }
 
-export interface PatchedLLMPrompt {
-    readonly id?: string
-    /** @maxLength 255 */
-    name?: string
+export interface PatchedLLMPromptPublish {
     prompt?: unknown
-    readonly version?: number
-    readonly created_by?: UserBasic
-    readonly created_at?: string
-    readonly updated_at?: string
-    deleted?: boolean
+    /** @minimum 1 */
+    base_version?: number
 }
 
 export interface PatchedLLMProviderKey {
@@ -21818,6 +22014,7 @@ export interface PatchedTask {
     readonly slug?: string
     /** @maxLength 255 */
     title?: string
+    title_manually_set?: boolean
     description?: string
     origin_product?: OriginProductEnum
     /**
@@ -22124,6 +22321,9 @@ export interface PatchedTeam {
     readonly available_setup_task_ids?: readonly AvailableSetupTaskIdsEnum[]
 }
 
+/**
+ * Serializer mixin that handles tags for objects.
+ */
 export interface PatchedTicket {
     readonly id?: string
     readonly ticket_number?: number
@@ -22157,6 +22357,17 @@ export interface PatchedTicket {
     /** @nullable */
     readonly slack_team_id?: string | null
     readonly person?: TicketPerson | null
+    tags?: unknown[]
+}
+
+/**
+ * @nullable
+ */
+export type PatchedUpdateRepoRequestInputBaselineFilePaths = { [key: string]: string } | null | null
+
+export interface PatchedUpdateRepoRequestInput {
+    /** @nullable */
+    baseline_file_paths?: PatchedUpdateRepoRequestInputBaselineFilePaths
 }
 
 export type PatchedUserNotificationSettings = { [key: string]: unknown }
@@ -24837,6 +25048,11 @@ export type QueryResponseAlternative65ResultsItem = { [key: string]: unknown }
 
 export interface QueryResponseAlternative65 {
     /**
+     * Box plot data when display type is BoxPlot
+     * @nullable
+     */
+    boxplot_data?: BoxPlotDatum[] | null
+    /**
      * Query error. Returned only if 'explain' or `modifiers.debug` is true. Throws an error otherwise.
      * @nullable
      */
@@ -25691,21 +25907,26 @@ export interface RepositoryReadinessResponse {
     scan?: ScanEvidence
 }
 
-export type SentimentResponseScores = { [key: string]: number }
+export interface ReviewStateCounts {
+    needs_review: number
+    clean: number
+    processing: number
+    stale: number
+}
 
-export type SentimentResponseGenerations = { [key: string]: GenerationSentiment }
+export type SentimentResultScores = { [key: string]: number }
 
-export interface SentimentResponse {
-    trace_id: string
+export type SentimentResultMessages = { [key: string]: MessageSentiment }
+
+export interface SentimentResult {
     label: string
     score: number
-    scores: SentimentResponseScores
-    generations: SentimentResponseGenerations
-    generation_count: number
+    scores: SentimentResultScores
+    messages: SentimentResultMessages
     message_count: number
 }
 
-export type SentimentBatchResponseResults = { [key: string]: SentimentResponse }
+export type SentimentBatchResponseResults = { [key: string]: SentimentResult }
 
 export interface SentimentBatchResponse {
     results: SentimentBatchResponseResults
@@ -25714,9 +25935,10 @@ export interface SentimentBatchResponse {
 export interface SentimentRequest {
     /**
      * @minItems 1
-     * @maxItems 5
+     * @maxItems 20
      */
-    trace_ids: string[]
+    ids: string[]
+    analysis_level?: AnalysisLevelEnum
     force_refresh?: boolean
     /** @nullable */
     date_from?: string | null
@@ -28128,6 +28350,34 @@ export type LlmPromptsListParams = {
     offset?: number
 }
 
+export type LlmPromptsNameRetrieveParams = {
+    /**
+     * @minimum 1
+     */
+    version?: number
+}
+
+export type LlmPromptsResolveNameRetrieveParams = {
+    /**
+     * @minimum 1
+     */
+    before_version?: number
+    /**
+     * @minimum 1
+     * @maximum 100
+     */
+    limit?: number
+    /**
+     * @minimum 0
+     */
+    offset?: number
+    /**
+     * @minimum 1
+     */
+    version?: number
+    version_id?: string
+}
+
 export type MaterializedColumnSlotsListParams = {
     /**
      * Number of results to return per page.
@@ -30401,6 +30651,58 @@ export type TasksRepositoryReadinessRetrieveParams = {
 }
 
 export type UserProductListListParams = {
+    /**
+     * Number of results to return per page.
+     */
+    limit?: number
+    /**
+     * The initial index from which to return the results.
+     */
+    offset?: number
+}
+
+export type VisualReviewReposListParams = {
+    /**
+     * Number of results to return per page.
+     */
+    limit?: number
+    /**
+     * The initial index from which to return the results.
+     */
+    offset?: number
+}
+
+export type VisualReviewRunsListParams = {
+    /**
+     * Number of results to return per page.
+     */
+    limit?: number
+    /**
+     * The initial index from which to return the results.
+     */
+    offset?: number
+    /**
+     * Filter by review state
+     */
+    review_state?: string
+}
+
+export type VisualReviewRunsSnapshotHistoryListParams = {
+    /**
+     * Snapshot identifier
+     */
+    identifier: string
+    /**
+     * Number of results to return per page.
+     */
+    limit?: number
+    /**
+     * The initial index from which to return the results.
+     */
+    offset?: number
+}
+
+export type VisualReviewRunsSnapshotsListParams = {
     /**
      * Number of results to return per page.
      */
