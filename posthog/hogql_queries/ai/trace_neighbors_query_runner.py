@@ -29,17 +29,42 @@ class TraceNeighborsQueryRunner(AnalyticsQueryRunner[TraceNeighborsQueryResponse
     cached_response: CachedTraceNeighborsQueryResponse
 
     def _calculate(self):
+        older_trace_id, older_timestamp, newer_trace_id, newer_timestamp = self._execute_neighbors_query(
+            self._build_query("ai_events")
+        )
+
+        # Fall back to events table for missing directions
+        if older_trace_id is None or newer_trace_id is None:
+            from posthog.hogql_queries.ai.events_fallback import EVENTS_AS_AI_EVENTS
+
+            fb_older, fb_older_ts, fb_newer, fb_newer_ts = self._execute_neighbors_query(
+                self._build_query(EVENTS_AS_AI_EVENTS)
+            )
+            if older_trace_id is None:
+                older_trace_id, older_timestamp = fb_older, fb_older_ts
+            if newer_trace_id is None:
+                newer_trace_id, newer_timestamp = fb_newer, fb_newer_ts
+
+        return TraceNeighborsQueryResponse(
+            olderTraceId=older_trace_id,
+            olderTimestamp=older_timestamp,
+            newerTraceId=newer_trace_id,
+            newerTimestamp=newer_timestamp,
+        )
+
+    def _execute_neighbors_query(
+        self, query: ast.SelectQuery | ast.SelectSetQuery
+    ) -> tuple[str | None, str | None, str | None, str | None]:
         with self.timings.measure("trace_neighbors"), tags_context(product=Product.LLM_ANALYTICS):
             result = execute_hogql_query(
                 query_type="TraceNeighborsQuery",
-                query=self.to_query(),
+                query=query,
                 placeholders=self._get_placeholders(),
                 team=self.team,
                 timings=self.timings,
                 modifiers=self.modifiers,
             )
 
-            # Parse results - could have 0, 1, or 2 rows
             older_trace_id, older_timestamp = None, None
             newer_trace_id, newer_timestamp = None, None
 
@@ -52,12 +77,7 @@ class TraceNeighborsQueryRunner(AnalyticsQueryRunner[TraceNeighborsQueryResponse
                     newer_trace_id = str(trace_id) if trace_id else None
                     newer_timestamp = timestamp.isoformat() if timestamp else None
 
-            return TraceNeighborsQueryResponse(
-                olderTraceId=older_trace_id,
-                olderTimestamp=older_timestamp,
-                newerTraceId=newer_trace_id,
-                newerTimestamp=newer_timestamp,
-            )
+            return older_trace_id, older_timestamp, newer_trace_id, newer_timestamp
 
     def _get_filter_conditions(self) -> ast.Expr:
         """Build the filter conditions, similar to TracesQueryRunner."""
@@ -154,12 +174,15 @@ class TraceNeighborsQueryRunner(AnalyticsQueryRunner[TraceNeighborsQueryResponse
         )
 
     def to_query(self) -> ast.SelectQuery | ast.SelectSetQuery:
+        return self._build_query("ai_events")
+
+    def _build_query(self, from_clause: str) -> ast.SelectSetQuery:
         """
         Build a query that finds both older and newer traces using UNION ALL.
         Uses tuple comparison (timestamp, trace_id) to handle identical timestamps deterministically.
         """
         query = parse_select(
-            """
+            f"""
             SELECT
                 'older' as direction,
                 trace_id,
@@ -168,12 +191,12 @@ class TraceNeighborsQueryRunner(AnalyticsQueryRunner[TraceNeighborsQueryResponse
                 SELECT
                     trace_id,
                     max(timestamp) as trace_timestamp
-                FROM ai_events
+                FROM {from_clause}
                 WHERE event IN ('$ai_span', '$ai_generation', '$ai_embedding', '$ai_metric', '$ai_feedback', '$ai_trace')
-                  AND timestamp <= {current_timestamp}
-                  AND {conditions}
+                  AND timestamp <= {{current_timestamp}}
+                  AND {{conditions}}
                 GROUP BY trace_id
-                HAVING (trace_timestamp, trace_id) < ({current_timestamp}, {current_trace_id})
+                HAVING (trace_timestamp, trace_id) < ({{current_timestamp}}, {{current_trace_id}})
                 ORDER BY trace_timestamp DESC, trace_id DESC
                 LIMIT 1
             )
@@ -188,12 +211,12 @@ class TraceNeighborsQueryRunner(AnalyticsQueryRunner[TraceNeighborsQueryResponse
                 SELECT
                     trace_id,
                     max(timestamp) as trace_timestamp
-                FROM ai_events
+                FROM {from_clause}
                 WHERE event IN ('$ai_span', '$ai_generation', '$ai_embedding', '$ai_metric', '$ai_feedback', '$ai_trace')
-                  AND timestamp >= {current_timestamp}
-                  AND {conditions}
+                  AND timestamp >= {{current_timestamp}}
+                  AND {{conditions}}
                 GROUP BY trace_id
-                HAVING (trace_timestamp, trace_id) > ({current_timestamp}, {current_trace_id})
+                HAVING (trace_timestamp, trace_id) > ({{current_timestamp}}, {{current_trace_id}})
                 ORDER BY trace_timestamp ASC, trace_id ASC
                 LIMIT 1
             )

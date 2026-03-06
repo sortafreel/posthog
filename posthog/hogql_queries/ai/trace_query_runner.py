@@ -1,7 +1,6 @@
 from datetime import datetime, timedelta
 from functools import cached_property
 from typing import Any, Optional, cast
-from uuid import UUID
 
 import orjson
 import structlog
@@ -22,6 +21,7 @@ from posthog.hogql.property import property_to_expr
 from posthog.hogql.query import execute_hogql_query
 
 from posthog.clickhouse.query_tagging import Product, tags_context
+from posthog.hogql_queries.ai.utils import merge_heavy_properties
 from posthog.hogql_queries.query_runner import AnalyticsQueryRunner
 from posthog.hogql_queries.utils.query_date_range import QueryDateRange
 
@@ -57,18 +57,13 @@ class TraceQueryRunner(AnalyticsQueryRunner[TraceQueryResponse]):
         super().__init__(*args, **kwargs)
 
     def _calculate(self):
-        with self.timings.measure("trace_query_hogql_execute"), tags_context(product=Product.LLM_ANALYTICS):
-            query_result = execute_hogql_query(
-                query=self.to_query(),
-                placeholders={
-                    "filter_conditions": self._get_where_clause(),
-                },
-                team=self.team,
-                query_type=NodeKind.TRACE_QUERY,
-                timings=self.timings,
-                modifiers=self.modifiers,
-                limit_context=self.limit_context,
-            )
+        query_result = self._execute_trace_query(self._build_query("ai_events"))
+
+        # Fall back to events table if ai_events returned nothing (expired TTL / pre-dual-write data)
+        if not query_result.results:
+            from posthog.hogql_queries.ai.events_fallback import EVENTS_AS_AI_EVENTS
+
+            query_result = self._execute_trace_query(self._build_query(EVENTS_AS_AI_EVENTS))
 
         columns: list[str] = query_result.columns or []
         results = self._map_results(columns, query_result.results)
@@ -81,9 +76,26 @@ class TraceQueryRunner(AnalyticsQueryRunner[TraceQueryResponse]):
             modifiers=self.modifiers,
         )
 
+    def _execute_trace_query(self, query: ast.SelectQuery):
+        with self.timings.measure("trace_query_hogql_execute"), tags_context(product=Product.LLM_ANALYTICS):
+            return execute_hogql_query(
+                query=query,
+                placeholders={
+                    "filter_conditions": self._get_where_clause(),
+                },
+                team=self.team,
+                query_type=NodeKind.TRACE_QUERY,
+                timings=self.timings,
+                modifiers=self.modifiers,
+                limit_context=self.limit_context,
+            )
+
     def to_query(self):
+        return self._build_query("ai_events")
+
+    def _build_query(self, from_clause: str) -> ast.SelectQuery:
         query = parse_select(
-            """
+            f"""
             SELECT
                 trace_id AS id,
                 any(session_id) AS ai_session_id,
@@ -132,7 +144,8 @@ class TraceQueryRunner(AnalyticsQueryRunner[TraceQueryResponse]):
                     arraySort(
                         x -> x.3,
                         groupArrayIf(
-                            tuple(uuid, event, timestamp, properties),
+                            tuple(uuid, event, timestamp, properties,
+                                  input, output, output_choices, input_state, output_state, tools),
                             event != '$ai_trace'
                         )
                     )
@@ -154,11 +167,11 @@ class TraceQueryRunner(AnalyticsQueryRunner[TraceQueryResponse]):
                         timestamp,
                     )
                 ) AS trace_name
-            FROM ai_events
+            FROM {from_clause}
             WHERE event IN (
                 '$ai_span', '$ai_generation', '$ai_embedding', '$ai_metric', '$ai_feedback', '$ai_trace'
             )
-              AND {filter_conditions}
+              AND {{filter_conditions}}
             GROUP BY trace_id
             LIMIT 1
             """,
@@ -169,7 +182,7 @@ class TraceQueryRunner(AnalyticsQueryRunner[TraceQueryResponse]):
         return {
             **super().get_cache_payload(),
             # When the response schema changes, increment this version to invalidate the cache.
-            "schema_version": 3,
+            "schema_version": 4,
         }
 
     @cached_property
@@ -213,8 +226,8 @@ class TraceQueryRunner(AnalyticsQueryRunner[TraceQueryResponse]):
         }
 
         generations = []
-        for uuid, event_name, timestamp, properties in result["events"]:
-            generations.append(self._map_event(uuid, event_name, timestamp, properties))
+        for event_tuple in result["events"]:
+            generations.append(self._map_event(event_tuple))
 
         trace_dict = {
             **result,
@@ -235,14 +248,14 @@ class TraceQueryRunner(AnalyticsQueryRunner[TraceQueryResponse]):
         )
         return trace
 
-    def _map_event(
-        self, event_uuid: UUID, event_name: str, event_timestamp: datetime, event_properties: str
-    ) -> LLMTraceEvent:
+    def _map_event(self, event_tuple: tuple) -> LLMTraceEvent:
+        event_uuid, event_name, event_timestamp, event_properties, *heavy = event_tuple
+        heavy_columns = dict(zip(("input", "output", "output_choices", "input_state", "output_state", "tools"), heavy))
         generation: dict[str, Any] = {
             "id": str(event_uuid),
             "event": event_name,
             "createdAt": event_timestamp.isoformat(),
-            "properties": orjson.loads(event_properties),
+            "properties": merge_heavy_properties(event_properties, heavy_columns),
         }
         return LLMTraceEvent.model_validate(generation)
 

@@ -13,6 +13,16 @@ const LARGE_AI_PROPERTIES = new Set([
     '$ai_tools',
 ])
 
+const AI_EVENT_NAMES = new Set([
+    '$ai_generation',
+    '$ai_span',
+    '$ai_trace',
+    '$ai_embedding',
+    '$ai_metric',
+    '$ai_feedback',
+    '$ai_evaluation',
+])
+
 export interface SplitAiEventsStepConfig {
     enabled: boolean
     /** '*' for all teams, or a Set of enabled team IDs */
@@ -39,8 +49,13 @@ function hasLargeAiProperties(properties: Record<string, unknown>): boolean {
 
 function maybeStripAiProperties(entry: EventToEmit<EventOutput>): EventToEmit<EventOutput | AiEventOutput>[] {
     const properties = entry.event.properties ?? {}
+    const isAiEvent = AI_EVENT_NAMES.has(entry.event.event)
 
     if (!hasLargeAiProperties(properties)) {
+        if (isAiEvent) {
+            // AI event without heavy properties: send unchanged to both outputs
+            return [entry, { event: entry.event, output: AI_EVENTS_OUTPUT }]
+        }
         return [entry]
     }
 

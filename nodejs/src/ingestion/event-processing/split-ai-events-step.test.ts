@@ -149,8 +149,48 @@ describe('split-ai-events-step', () => {
             }
         )
 
-        it('should pass through event without large AI properties', async () => {
-            const event = createProcessedEvent({ $ai_model: 'gpt-4', $browser: 'Chrome' })
+        it('should send AI event without large properties to both outputs', async () => {
+            const event = createProcessedEvent({ $ai_model: 'gpt-4', $browser: 'Chrome' }, { event: '$ai_metric' })
+
+            const result = await step({ eventsToEmit: [{ event, output: EVENTS_OUTPUT }], teamId: 1 })
+            expect(isOkResult(result)).toBe(true)
+            if (!isOkResult(result)) {
+                return
+            }
+
+            const { eventsToEmit } = result.value
+            expect(eventsToEmit).toHaveLength(2)
+            expect(eventsToEmit[0].event).toBe(event)
+            expect(eventsToEmit[0].output).toBe(EVENTS_OUTPUT)
+            expect(eventsToEmit[1].event).toBe(event)
+            expect(eventsToEmit[1].output).toBe(AI_EVENTS_OUTPUT)
+        })
+
+        it.each([
+            '$ai_metric',
+            '$ai_feedback',
+            '$ai_evaluation',
+            '$ai_generation',
+            '$ai_span',
+            '$ai_trace',
+            '$ai_embedding',
+        ])('should send %s without large properties to both outputs', async (eventName) => {
+            const event = createProcessedEvent({ $ai_model: 'gpt-4' }, { event: eventName })
+
+            const result = await step({ eventsToEmit: [{ event, output: EVENTS_OUTPUT }], teamId: 1 })
+            expect(isOkResult(result)).toBe(true)
+            if (!isOkResult(result)) {
+                return
+            }
+
+            const { eventsToEmit } = result.value
+            expect(eventsToEmit).toHaveLength(2)
+            expect(eventsToEmit[0].output).toBe(EVENTS_OUTPUT)
+            expect(eventsToEmit[1].output).toBe(AI_EVENTS_OUTPUT)
+        })
+
+        it('should pass through non-AI event without large AI properties', async () => {
+            const event = createProcessedEvent({ $browser: 'Chrome' }, { event: '$pageview' })
 
             const result = await step({ eventsToEmit: [{ event, output: EVENTS_OUTPUT }], teamId: 1 })
             expect(isOkResult(result)).toBe(true)
@@ -191,8 +231,25 @@ describe('split-ai-events-step', () => {
             expect(eventsToEmit[2].output).toBe(EVENTS_OUTPUT)
         })
 
-        it('should handle empty properties', async () => {
+        it('should handle AI event with empty properties', async () => {
             const event = createProcessedEvent({})
+
+            const result = await step({ eventsToEmit: [{ event, output: EVENTS_OUTPUT }], teamId: 1 })
+            expect(isOkResult(result)).toBe(true)
+            if (!isOkResult(result)) {
+                return
+            }
+
+            // $ai_generation is an AI event, so it goes to both outputs
+            expect(result.value.eventsToEmit).toHaveLength(2)
+            expect(result.value.eventsToEmit[0].event).toBe(event)
+            expect(result.value.eventsToEmit[0].output).toBe(EVENTS_OUTPUT)
+            expect(result.value.eventsToEmit[1].event).toBe(event)
+            expect(result.value.eventsToEmit[1].output).toBe(AI_EVENTS_OUTPUT)
+        })
+
+        it('should handle non-AI event with empty properties', async () => {
+            const event = createProcessedEvent({}, { event: '$pageview' })
 
             const result = await step({ eventsToEmit: [{ event, output: EVENTS_OUTPUT }], teamId: 1 })
             expect(isOkResult(result)).toBe(true)
@@ -204,8 +261,8 @@ describe('split-ai-events-step', () => {
             expect(result.value.eventsToEmit[0].event).toBe(event)
         })
 
-        it('should handle undefined properties', async () => {
-            const event = createProcessedEvent()
+        it('should handle undefined properties on non-AI event', async () => {
+            const event = createProcessedEvent({}, { event: '$pageview' })
             event.properties = undefined as any
 
             const result = await step({ eventsToEmit: [{ event, output: EVENTS_OUTPUT }], teamId: 1 })
