@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.utils import timezone
 
 from rest_framework.authentication import BaseAuthentication
@@ -35,4 +36,7 @@ class StripeProvisioningBearerAuthentication(BaseAuthentication):
 def _is_stripe_oauth_app(app) -> bool:
     if app is None:
         return False
+    configured_client_id = getattr(settings, "STRIPE_POSTHOG_OAUTH_CLIENT_ID", "")
+    if configured_client_id:
+        return app.client_id == configured_client_id
     return app.name == STRIPE_APP_NAME

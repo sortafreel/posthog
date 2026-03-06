@@ -20,6 +20,7 @@ class TestProvisioningResources(StripeProvisioningTestBase):
         data = res.json()
         assert data["status"] == "complete"
         assert data["id"] == str(self.team.id)
+        assert data["service_id"] == "posthog_analytics"
         assert "api_key" in data["complete"]["access_configuration"]
         assert "host" in data["complete"]["access_configuration"]
 
@@ -33,6 +34,7 @@ class TestProvisioningResources(StripeProvisioningTestBase):
         data = res.json()
         assert data["status"] == "complete"
         assert data["id"] == str(self.team.id)
+        assert data["service_id"] == "posthog_analytics"
 
     def test_get_resource_wrong_team_returns_403(self):
         token = self._get_bearer_token()
@@ -102,6 +104,16 @@ class TestProvisioningResources(StripeProvisioningTestBase):
             token=token,
         )
         assert res.status_code == 404
+
+    def test_create_resource_unknown_service_id_returns_400(self):
+        token = self._get_bearer_token()
+        res = self._post_signed_with_bearer(
+            "/api/agentic/provisioning/resources",
+            data={"service_id": "unknown_service"},
+            token=token,
+        )
+        assert res.status_code == 400
+        assert res.json()["error"]["code"] == "unknown_service"
 
     def test_expired_bearer_returns_401(self):
         token = self._get_bearer_token()

@@ -43,6 +43,7 @@ class TestE2EProvisioningFlow(StripeProvisioningTestBase):
         }
         res = self._post_signed("/api/agentic/provisioning/account_requests", data=account_request)
         assert res.status_code == 200
+        assert res.json()["id"] == "acctreq_e2e_test"
         assert res.json()["type"] == "oauth"
         auth_code = res.json()["oauth"]["code"]
 
@@ -64,6 +65,7 @@ class TestE2EProvisioningFlow(StripeProvisioningTestBase):
         refresh_token = token_data["refresh_token"]
         assert access_token.startswith("pha_")
         assert refresh_token.startswith("phr_")
+        assert token_data["scope"] == "query:read project:read"
         assert token_data["account"]["id"]
 
         # 5. Provision a resource
@@ -75,6 +77,7 @@ class TestE2EProvisioningFlow(StripeProvisioningTestBase):
         assert res.status_code == 200
         resource_data = res.json()
         assert resource_data["status"] == "complete"
+        assert resource_data["service_id"] == "posthog_analytics"
         resource_id = resource_data["id"]
         assert "api_key" in resource_data["complete"]["access_configuration"]
 

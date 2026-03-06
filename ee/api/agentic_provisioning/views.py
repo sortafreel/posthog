@@ -327,6 +327,12 @@ def _exchange_refresh_token(request: Request) -> Response:
     if old_refresh is None:
         return Response({"error": "invalid_grant", "error_description": "Invalid or revoked refresh token"}, status=400)
 
+    oauth_app = old_refresh.application
+    user = old_refresh.user
+    scoped_teams = old_refresh.scoped_teams
+    old_access = old_refresh.access_token
+    old_scope = old_access.scope if old_access else StripeIntegration.SCOPES
+
     # Atomically revoke to prevent replay attacks — if another request already revoked it, rows_updated == 0
     rows_updated = OAuthRefreshToken.objects.filter(id=old_refresh.id, revoked__isnull=True).update(
         revoked=timezone.now(), access_token=None
@@ -334,12 +340,6 @@ def _exchange_refresh_token(request: Request) -> Response:
     if rows_updated == 0:
         return Response({"error": "invalid_grant", "error_description": "Invalid or revoked refresh token"}, status=400)
 
-    oauth_app = old_refresh.application
-    user = old_refresh.user
-    scoped_teams = old_refresh.scoped_teams
-    old_scope = old_refresh.access_token.scope if old_refresh.access_token else StripeIntegration.SCOPES
-
-    old_access = old_refresh.access_token
     if old_access:
         old_access.delete()
 
@@ -389,6 +389,17 @@ def provisioning_resources_create(request: Request) -> Response:
         return auth_error
     assert access_token is not None
 
+    service_id = request.data.get("service_id", "")
+    if service_id and service_id != "posthog_analytics":
+        return Response(
+            {
+                "status": "error",
+                "id": "",
+                "error": {"code": "unknown_service", "message": f"Unknown service_id: {service_id}"},
+            },
+            status=400,
+        )
+
     scoped_teams = access_token.scoped_teams or []
 
     if not scoped_teams:
@@ -418,6 +429,7 @@ def provisioning_resources_create(request: Request) -> Response:
         {
             "status": "complete",
             "id": str(team_id),
+            "service_id": "posthog_analytics",
             "complete": {
                 "access_configuration": {
                     "api_key": team.api_token,
@@ -483,6 +495,7 @@ def provisioning_resource_detail(request: Request, resource_id: str) -> Response
         {
             "status": "complete",
             "id": resource_id,
+            "service_id": "posthog_analytics",
             "complete": {
                 "access_configuration": {
                     "api_key": team.api_token,
