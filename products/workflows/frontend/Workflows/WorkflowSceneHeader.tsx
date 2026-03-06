@@ -26,6 +26,7 @@ export const WorkflowSceneHeader = (props: WorkflowSceneLogicProps = {}): JSX.El
         workflowHasErrors,
         workflowHasActionErrors,
         hasDraft,
+        hasLocalDraftChanges,
     } = useValues(logic)
     const {
         saveWorkflowPartial,
@@ -45,6 +46,9 @@ export const WorkflowSceneHeader = (props: WorkflowSceneLogicProps = {}): JSX.El
 
     const isSavedWorkflow = props.id && props.id !== 'new'
     const isCreatedFromTemplate = props.id === 'new' && !!templateId
+    const isActiveWorkflow = workflow?.status === 'active'
+    const hasUnsavedChanges = workflowChanged || hasLocalDraftChanges
+    const showDraftControls = hasDraft || (isActiveWorkflow && hasUnsavedChanges)
     const isManualWorkflow = ['manual', 'schedule', 'batch'].includes(workflow?.trigger?.type || '')
     const [displayStatus, setDisplayStatus] = useState(workflow?.status)
     const [isTransitioning, setIsTransitioning] = useState(false)
@@ -92,7 +96,7 @@ export const WorkflowSceneHeader = (props: WorkflowSceneLogicProps = {}): JSX.El
                                     }
                                     size="small"
                                     disabledReason={
-                                        hasDraft
+                                        showDraftControls
                                             ? 'Publish or discard draft first'
                                             : workflowChanged
                                               ? 'Save changes first'
@@ -137,17 +141,17 @@ export const WorkflowSceneHeader = (props: WorkflowSceneLogicProps = {}): JSX.El
                                 </ScenePanel>
                             </>
                         )}
-                        {hasDraft && (
+                        {showDraftControls && (
                             <LemonButton
                                 data-attr="discard-workflow-draft"
                                 type="secondary"
-                                onClick={() => discardDraft()}
+                                onClick={() => (hasDraft ? discardDraft() : discardChanges())}
                                 size="small"
                             >
                                 Discard changes
                             </LemonButton>
                         )}
-                        {!hasDraft && workflowChanged && (
+                        {!showDraftControls && workflowChanged && (
                             <LemonButton
                                 data-attr="discard-workflow-changes"
                                 type="secondary"
@@ -166,16 +170,28 @@ export const WorkflowSceneHeader = (props: WorkflowSceneLogicProps = {}): JSX.El
                             >
                                 Update template
                             </LemonButton>
-                        ) : hasDraft ? (
-                            <LemonButton
-                                type="primary"
-                                size="small"
-                                onClick={publishDraft}
-                                loading={isWorkflowSubmitting}
-                                data-attr="workflow-publish"
-                            >
-                                Publish
-                            </LemonButton>
+                        ) : showDraftControls ? (
+                            hasUnsavedChanges ? (
+                                <LemonButton
+                                    type="primary"
+                                    size="small"
+                                    onClick={submitWorkflow}
+                                    loading={isWorkflowSubmitting}
+                                    data-attr="workflow-save-draft"
+                                >
+                                    Save draft
+                                </LemonButton>
+                            ) : (
+                                <LemonButton
+                                    type="primary"
+                                    size="small"
+                                    onClick={publishDraft}
+                                    loading={isWorkflowSubmitting}
+                                    data-attr="workflow-publish"
+                                >
+                                    Publish
+                                </LemonButton>
+                            )
                         ) : (
                             <LemonButton
                                 type="primary"
