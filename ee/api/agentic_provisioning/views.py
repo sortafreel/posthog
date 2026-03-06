@@ -3,6 +3,7 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.core.cache import cache
+from django.db import IntegrityError
 from django.utils import timezone
 
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
@@ -78,6 +79,7 @@ def provisioning_services(request: Request) -> Response:
 @stripe_region_proxy(strategy="body_region")
 def account_requests(request: Request) -> Response:
     data = request.data
+    request_id = data.get("id", "")
     email = data.get("email")
     if not email:
         return Response(
@@ -109,21 +111,21 @@ def account_requests(request: Request) -> Response:
     existing_user = User.objects.filter(email=email).first()
 
     if existing_user:
-        return _handle_existing_user(request, existing_user, confirmation_secret, scopes, region)
+        return _handle_existing_user(request_id, existing_user, confirmation_secret, scopes)
 
-    return _handle_new_user(request, data, email, scopes, stripe_account_id, region, configuration)
+    return _handle_new_user(request_id, data, email, scopes, stripe_account_id, region)
 
 
 def _handle_existing_user(
-    request: Request,
+    request_id: str,
     user: User,
     confirmation_secret: str,
     scopes: list[str],
-    region: str,
 ) -> Response:
     authorize_url = _build_authorize_url(confirmation_secret, scopes)
     return Response(
         {
+            "id": request_id,
             "type": "requires_auth",
             "requires_auth": {
                 "type": "redirect",
@@ -134,23 +136,35 @@ def _handle_existing_user(
 
 
 def _handle_new_user(
-    request: Request,
+    request_id: str,
     data: dict,
     email: str,
     scopes: list[str],
     stripe_account_id: str,
     region: str,
-    configuration: dict,
 ) -> Response:
     name = data.get("name", "")
     first_name = name.split(" ")[0] if name else ""
 
-    organization, team, user = User.objects.bootstrap(
-        organization_name=f"Stripe ({email})",
-        email=email,
-        password=None,
-        first_name=first_name,
-    )
+    try:
+        organization, team, user = User.objects.bootstrap(
+            organization_name=f"Stripe ({email})",
+            email=email,
+            password=None,
+            first_name=first_name,
+        )
+    except IntegrityError:
+        existing = User.objects.filter(email=email).first()
+        if existing:
+            return _handle_existing_user(request_id, existing, data.get("confirmation_secret", ""), scopes)
+        return Response(
+            {
+                "id": request_id,
+                "type": "error",
+                "error": {"code": "account_creation_failed", "message": "Failed to create account"},
+            },
+            status=500,
+        )
 
     code = secrets.token_urlsafe(32)
     cache_key = f"{AUTH_CODE_CACHE_PREFIX}{code}"
@@ -167,7 +181,7 @@ def _handle_new_user(
         timeout=AUTH_CODE_TTL_SECONDS,
     )
 
-    return Response({"type": "oauth", "oauth": {"code": code}})
+    return Response({"id": request_id, "type": "oauth", "oauth": {"code": code}})
 
 
 def _build_authorize_url(confirmation_secret: str, scopes: list[str]) -> str:
@@ -256,6 +270,7 @@ def _exchange_authorization_code(request: Request) -> Response:
             "access_token": access_token_value,
             "refresh_token": refresh_token_value,
             "expires_in": 365 * 24 * 3600,
+            "scope": scope_str,
             "account": {
                 "id": account_id,
                 "payment_credentials": "provider",
@@ -311,6 +326,7 @@ def _exchange_refresh_token(request: Request) -> Response:
             "access_token": new_access_value,
             "refresh_token": new_refresh_value,
             "expires_in": 365 * 24 * 3600,
+            "scope": old_scope,
         }
     )
 
