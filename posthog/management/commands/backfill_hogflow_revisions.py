@@ -1,28 +1,13 @@
 import time
 import logging
-from typing import Final
 
 from django.core.management.base import BaseCommand
 from django.core.paginator import Paginator
 
 from posthog.models.hog_flow.hog_flow import HogFlow
-from posthog.models.hog_flow.hog_flow_revision import HogFlowRevision
+from posthog.models.hog_flow.hog_flow_revision import CONTENT_FIELDS, HogFlowRevision
 
 logger = logging.getLogger(__name__)
-
-CONTENT_FIELDS: Final = (
-    "name",
-    "description",
-    "trigger",
-    "trigger_masking",
-    "conversion",
-    "exit_condition",
-    "edges",
-    "actions",
-    "abort_action",
-    "variables",
-    "billable_action_types",
-)
 
 
 class Command(BaseCommand):

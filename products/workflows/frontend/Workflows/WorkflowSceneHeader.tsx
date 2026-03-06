@@ -25,9 +25,18 @@ export const WorkflowSceneHeader = (props: WorkflowSceneLogicProps = {}): JSX.El
         workflowLoading,
         workflowHasErrors,
         workflowHasActionErrors,
+        hasDraft,
     } = useValues(logic)
-    const { saveWorkflowPartial, submitWorkflow, discardChanges, setWorkflowValue, duplicate, archiveWorkflow } =
-        useActions(logic)
+    const {
+        saveWorkflowPartial,
+        submitWorkflow,
+        discardChanges,
+        setWorkflowValue,
+        duplicate,
+        archiveWorkflow,
+        publishDraft,
+        discardDraft,
+    } = useActions(logic)
     const { searchParams } = useValues(router)
     const editTemplateId = searchParams.editTemplateId as string | undefined
     const templateId = searchParams.templateId as string | undefined
@@ -83,11 +92,13 @@ export const WorkflowSceneHeader = (props: WorkflowSceneLogicProps = {}): JSX.El
                                     }
                                     size="small"
                                     disabledReason={
-                                        workflowChanged
-                                            ? 'Save changes first'
-                                            : workflow?.status === 'draft' && workflowHasActionErrors
-                                              ? 'Fix all errors before enabling'
-                                              : undefined
+                                        hasDraft
+                                            ? 'Publish or discard draft first'
+                                            : workflowChanged
+                                              ? 'Save changes first'
+                                              : workflow?.status === 'draft' && workflowHasActionErrors
+                                                ? 'Fix all errors before enabling'
+                                                : undefined
                                     }
                                     className="transition-colors duration-300 ease-in-out"
                                     data-attr="workflow-launch"
@@ -126,7 +137,17 @@ export const WorkflowSceneHeader = (props: WorkflowSceneLogicProps = {}): JSX.El
                                 </ScenePanel>
                             </>
                         )}
-                        {workflowChanged && (
+                        {hasDraft && (
+                            <LemonButton
+                                data-attr="discard-workflow-draft"
+                                type="secondary"
+                                onClick={() => discardDraft()}
+                                size="small"
+                            >
+                                Discard changes
+                            </LemonButton>
+                        )}
+                        {!hasDraft && workflowChanged && (
                             <LemonButton
                                 data-attr="discard-workflow-changes"
                                 type="secondary"
@@ -144,6 +165,16 @@ export const WorkflowSceneHeader = (props: WorkflowSceneLogicProps = {}): JSX.El
                                 loading={isWorkflowSubmitting}
                             >
                                 Update template
+                            </LemonButton>
+                        ) : hasDraft ? (
+                            <LemonButton
+                                type="primary"
+                                size="small"
+                                onClick={publishDraft}
+                                loading={isWorkflowSubmitting}
+                                data-attr="workflow-publish"
+                            >
+                                Publish
                             </LemonButton>
                         ) : (
                             <LemonButton

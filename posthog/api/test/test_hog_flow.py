@@ -11,6 +11,7 @@ from posthog.cdp.templates.hog_function_template import sync_template_to_db
 from posthog.cdp.templates.slack.template_slack import template as template_slack
 from posthog.models import Organization, Team, User
 from posthog.models.hog_flow.hog_flow import HogFlow
+from posthog.models.hog_flow.hog_flow_revision import HogFlowRevision
 
 webhook_template = MOCK_NODE_TEMPLATES[0]
 
@@ -1391,3 +1392,239 @@ class TestHogFlowAPI(APIBaseTest):
         assert response.status_code == 200, response.json()
         assert response.json()["deleted"] == 0
         assert HogFlow.objects.filter(id=flow_id).exists()
+
+
+class TestHogFlowRevisionAPI(APIBaseTest):
+    def setUp(self):
+        super().setUp()
+        sync_template_to_db(template_slack)
+        sync_template_to_db(webhook_template)
+
+    def _create_hog_flow_payload(self):
+        return {
+            "name": "Test Flow",
+            "actions": [
+                {
+                    "id": "trigger_node",
+                    "name": "trigger_1",
+                    "type": "trigger",
+                    "config": {
+                        "type": "event",
+                        "filters": {
+                            "events": [{"id": "$pageview", "name": "$pageview", "type": "events", "order": 0}],
+                        },
+                    },
+                },
+                {
+                    "id": "action_1",
+                    "name": "action_1",
+                    "type": "function",
+                    "config": {
+                        "template_id": "template-webhook",
+                        "inputs": {"url": {"value": "https://example.com"}},
+                    },
+                },
+            ],
+        }
+
+    def _create_active_flow(self, name: str = "Test Flow") -> str:
+        payload = self._create_hog_flow_payload()
+        payload["name"] = name
+        payload["status"] = "active"
+        response = self.client.post(f"/api/projects/{self.team.id}/hog_flows", payload)
+        assert response.status_code == 201, response.json()
+        return response.json()["id"]
+
+    def _create_draft_flow(self, name: str = "Test Flow") -> str:
+        payload = self._create_hog_flow_payload()
+        payload["name"] = name
+        payload["status"] = "draft"
+        response = self.client.post(f"/api/projects/{self.team.id}/hog_flows", payload)
+        assert response.status_code == 201, response.json()
+        return response.json()["id"]
+
+    def test_create_active_flow_creates_active_revision(self):
+        flow_id = self._create_active_flow()
+        flow = HogFlow.objects.get(pk=flow_id)
+        assert flow.active_revision is not None
+        assert flow.active_revision.status == HogFlowRevision.State.ACTIVE
+        assert flow.active_revision.version == 1
+        assert flow.active_revision.name == flow.name
+
+    def test_create_draft_flow_creates_draft_revision(self):
+        flow_id = self._create_draft_flow()
+        flow = HogFlow.objects.get(pk=flow_id)
+        assert flow.active_revision is None
+        rev = HogFlowRevision.objects.filter(hog_flow=flow).first()
+        assert rev is not None
+        assert rev.status == HogFlowRevision.State.DRAFT
+        assert rev.version == 1
+
+    def test_activate_draft_promotes_revision(self):
+        flow_id = self._create_draft_flow()
+        response = self.client.patch(
+            f"/api/projects/{self.team.id}/hog_flows/{flow_id}",
+            {"status": "active"},
+        )
+        assert response.status_code == 200, response.json()
+        flow = HogFlow.objects.get(pk=flow_id)
+        assert flow.active_revision is not None
+        assert flow.active_revision.status == HogFlowRevision.State.ACTIVE
+        assert HogFlowRevision.objects.filter(hog_flow=flow).count() == 1
+
+    def test_edit_draft_flow_updates_draft_revision(self):
+        flow_id = self._create_draft_flow()
+        payload = self._create_hog_flow_payload()
+        payload["name"] = "Updated Draft"
+        response = self.client.patch(f"/api/projects/{self.team.id}/hog_flows/{flow_id}", payload)
+        assert response.status_code == 200, response.json()
+
+        rev = HogFlowRevision.objects.get(hog_flow_id=flow_id, status=HogFlowRevision.State.DRAFT)
+        assert rev.name == "Updated Draft"
+
+    def test_save_draft_on_active_flow_creates_new_revision(self):
+        flow_id = self._create_active_flow()
+        response = self.client.patch(
+            f"/api/projects/{self.team.id}/hog_flows/{flow_id}/draft",
+            {"name": "Updated Name"},
+        )
+        assert response.status_code == 200, response.json()
+        assert response.json()["draft"]["name"] == "Updated Name"
+        assert response.json()["draft"]["updated_at"] is not None
+        assert response.json()["draft_updated_at"] is not None
+
+        revisions = HogFlowRevision.objects.filter(hog_flow_id=flow_id).order_by("version")
+        assert revisions.count() == 2
+        assert revisions[0].status == HogFlowRevision.State.ACTIVE
+        assert revisions[0].version == 1
+        assert revisions[1].status == HogFlowRevision.State.DRAFT
+        assert revisions[1].version == 2
+        assert revisions[1].name == "Updated Name"
+
+    def test_save_draft_updates_existing_draft_revision(self):
+        flow_id = self._create_active_flow()
+        self.client.patch(
+            f"/api/projects/{self.team.id}/hog_flows/{flow_id}/draft",
+            {"name": "First Edit"},
+        )
+        self.client.patch(
+            f"/api/projects/{self.team.id}/hog_flows/{flow_id}/draft",
+            {"description": "Added desc"},
+        )
+
+        assert HogFlowRevision.objects.filter(hog_flow_id=flow_id, status=HogFlowRevision.State.DRAFT).count() == 1
+
+        draft_rev = HogFlowRevision.objects.get(hog_flow_id=flow_id, status=HogFlowRevision.State.DRAFT)
+        assert draft_rev.name == "First Edit"
+        assert draft_rev.description == "Added desc"
+
+    def test_save_draft_persists_deleted_action_ids(self):
+        flow_id = self._create_active_flow()
+        response = self.client.patch(
+            f"/api/projects/{self.team.id}/hog_flows/{flow_id}/draft",
+            {"name": "With Deletes", "deleted_action_ids": ["action_1"]},
+        )
+        assert response.status_code == 200, response.json()
+        assert response.json()["draft"]["deleted_action_ids"] == ["action_1"]
+
+        draft_rev = HogFlowRevision.objects.get(hog_flow_id=flow_id, status=HogFlowRevision.State.DRAFT)
+        assert draft_rev.deleted_action_ids == ["action_1"]
+
+    def test_save_draft_rejected_on_draft_flow(self):
+        flow_id = self._create_draft_flow()
+        response = self.client.patch(
+            f"/api/projects/{self.team.id}/hog_flows/{flow_id}/draft",
+            {"name": "Nope"},
+        )
+        assert response.status_code == 400
+
+    def test_publish_draft_archives_old_revision(self):
+        flow_id = self._create_active_flow()
+        self.client.patch(
+            f"/api/projects/{self.team.id}/hog_flows/{flow_id}/draft",
+            {"name": "Published Name"},
+        )
+
+        response = self.client.post(f"/api/projects/{self.team.id}/hog_flows/{flow_id}/publish")
+        assert response.status_code == 200, response.json()
+        assert response.json()["name"] == "Published Name"
+        assert response.json()["draft"] is None
+
+        flow = HogFlow.objects.get(pk=flow_id)
+        assert flow.name == "Published Name"
+        assert flow.active_revision.version == 2
+
+        revisions = HogFlowRevision.objects.filter(hog_flow_id=flow_id).order_by("version")
+        assert revisions.count() == 2
+        assert revisions[0].status == HogFlowRevision.State.ARCHIVED
+        assert revisions[1].status == HogFlowRevision.State.ACTIVE
+
+    def test_publish_without_draft_fails(self):
+        flow_id = self._create_active_flow()
+        response = self.client.post(f"/api/projects/{self.team.id}/hog_flows/{flow_id}/publish")
+        assert response.status_code == 400
+
+    def test_discard_draft_deletes_revision(self):
+        flow_id = self._create_active_flow()
+        self.client.patch(
+            f"/api/projects/{self.team.id}/hog_flows/{flow_id}/draft",
+            {"name": "Should be discarded"},
+        )
+
+        response = self.client.post(f"/api/projects/{self.team.id}/hog_flows/{flow_id}/discard_draft")
+        assert response.status_code == 200, response.json()
+        assert response.json()["draft"] is None
+
+        assert not HogFlowRevision.objects.filter(hog_flow_id=flow_id, status=HogFlowRevision.State.DRAFT).exists()
+        assert HogFlow.objects.get(pk=flow_id).name == "Test Flow"
+        assert HogFlowRevision.objects.filter(hog_flow_id=flow_id).count() == 1
+
+    def test_metadata_update_preserves_draft(self):
+        flow_id = self._create_active_flow()
+        self.client.patch(
+            f"/api/projects/{self.team.id}/hog_flows/{flow_id}/draft",
+            {"name": "Draft Edit"},
+        )
+        assert HogFlowRevision.objects.filter(hog_flow_id=flow_id, status=HogFlowRevision.State.DRAFT).exists()
+
+        response = self.client.patch(
+            f"/api/projects/{self.team.id}/hog_flows/{flow_id}",
+            {"name": "New Metadata Name"},
+        )
+        assert response.status_code == 200, response.json()
+
+        assert HogFlowRevision.objects.filter(hog_flow_id=flow_id, status=HogFlowRevision.State.DRAFT).exists()
+
+        flow = HogFlow.objects.get(pk=flow_id)
+        assert flow.name == "New Metadata Name"
+        assert flow.active_revision.name == "New Metadata Name"
+
+    def test_full_revision_lifecycle(self):
+        flow_id = self._create_draft_flow()
+
+        self.client.patch(
+            f"/api/projects/{self.team.id}/hog_flows/{flow_id}",
+            {"status": "active"},
+        )
+        assert HogFlowRevision.objects.filter(hog_flow_id=flow_id).count() == 1
+
+        self.client.patch(
+            f"/api/projects/{self.team.id}/hog_flows/{flow_id}/draft",
+            {"name": "v2 changes"},
+        )
+        assert HogFlowRevision.objects.filter(hog_flow_id=flow_id).count() == 2
+
+        self.client.post(f"/api/projects/{self.team.id}/hog_flows/{flow_id}/publish")
+        revisions = HogFlowRevision.objects.filter(hog_flow_id=flow_id).order_by("version")
+        assert revisions.count() == 2
+        assert revisions[0].status == HogFlowRevision.State.ARCHIVED
+        assert revisions[1].status == HogFlowRevision.State.ACTIVE
+
+        self.client.patch(
+            f"/api/projects/{self.team.id}/hog_flows/{flow_id}/draft",
+            {"name": "v3 changes"},
+        )
+        assert HogFlowRevision.objects.filter(hog_flow_id=flow_id).count() == 3
+
+        self.client.post(f"/api/projects/{self.team.id}/hog_flows/{flow_id}/discard_draft")
+        assert HogFlowRevision.objects.filter(hog_flow_id=flow_id).count() == 2

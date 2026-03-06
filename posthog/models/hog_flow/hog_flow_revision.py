@@ -1,6 +1,28 @@
+from typing import Final
+
 from django.db import models
 
 from posthog.models.utils import UUIDTModel
+
+# Metadata fields that save directly to the HogFlow row + active revision
+# even when a draft exists (name/description are independent of draft content).
+METADATA_FIELDS: Final = ("name", "description")
+
+# Workflow content fields that go through the draft flow on active workflows.
+WORKFLOW_FIELDS: Final = (
+    "trigger",
+    "trigger_masking",
+    "conversion",
+    "exit_condition",
+    "edges",
+    "actions",
+    "abort_action",
+    "variables",
+    "billable_action_types",
+)
+
+# All content fields on a revision (metadata + workflow).
+CONTENT_FIELDS: Final = METADATA_FIELDS + WORKFLOW_FIELDS
 
 
 class HogFlowRevision(UUIDTModel):
@@ -20,6 +42,7 @@ class HogFlowRevision(UUIDTModel):
     class State(models.TextChoices):
         DRAFT = "draft"
         ACTIVE = "active"
+        ARCHIVED = "archived"
 
     hog_flow = models.ForeignKey("posthog.HogFlow", on_delete=models.CASCADE, related_name="revisions")
     team = models.ForeignKey("posthog.Team", on_delete=models.CASCADE)
@@ -43,6 +66,10 @@ class HogFlowRevision(UUIDTModel):
     variables = models.JSONField(default=list, null=True, blank=True)
 
     billable_action_types = models.JSONField(default=list, null=True, blank=True)
+
+    # IDs of soft-deleted actions in this draft; used by the frontend
+    # to render ghost nodes that survive page refresh.
+    deleted_action_ids = models.JSONField(default=list, blank=True)
 
     def __str__(self):
         return f"HogFlowRevision {self.hog_flow_id}/v{self.version} ({self.status})"

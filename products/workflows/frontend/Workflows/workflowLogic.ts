@@ -146,6 +146,8 @@ export const workflowLogic = kea<workflowLogicType>([
             scheduledAt,
         }),
         discardChanges: true,
+        publishDraft: true,
+        discardDraft: true,
         duplicate: true,
     }),
     loaders(({ props, values }) => ({
@@ -197,6 +199,11 @@ export const workflowLogic = kea<workflowLogicType>([
                             })
                         }
                         return result
+                    }
+
+                    // Active workflows: save content changes as a draft revision
+                    if (values.originalWorkflow?.status === 'active') {
+                        return api.hogFlows.saveDraft(props.id, updates)
                     }
 
                     return api.hogFlows.updateHogFlow(props.id, updates)
@@ -252,6 +259,7 @@ export const workflowLogic = kea<workflowLogicType>([
     })),
     selectors({
         logicProps: [() => [(_, props: WorkflowLogicProps) => props], (props): WorkflowLogicProps => props],
+        hasDraft: [(s) => [s.originalWorkflow], (originalWorkflow): boolean => !!originalWorkflow?.draft],
         workflowLoading: [(s) => [s.originalWorkflowLoading], (originalWorkflowLoading) => originalWorkflowLoading],
         edgesByActionId: [
             (s) => [s.workflow],
@@ -427,10 +435,20 @@ export const workflowLogic = kea<workflowLogicType>([
                 lemonToast.error('Fix all errors before enabling')
                 return
             }
+            if (workflow.status && values.hasDraft) {
+                lemonToast.error('Publish or discard draft first')
+                return
+            }
             actions.saveWorkflow(merged)
         },
         loadWorkflowSuccess: async ({ originalWorkflow }) => {
-            actions.resetWorkflow(originalWorkflow)
+            if (originalWorkflow?.draft && originalWorkflow.status === 'active') {
+                // Hydrate the form with draft content while keeping identity from the live record
+                const { updated_at: _draftUpdatedAt, ...draftContent } = originalWorkflow.draft
+                actions.resetWorkflow({ ...originalWorkflow, ...draftContent, draft: originalWorkflow.draft })
+            } else {
+                actions.resetWorkflow(originalWorkflow)
+            }
         },
         saveWorkflowSuccess: async ({ originalWorkflow }) => {
             const tasksToMarkAsCompleted: SetupTaskId[] = []
@@ -478,6 +496,42 @@ export const workflowLogic = kea<workflowLogicType>([
             }
 
             actions.resetWorkflow(originalWorkflow)
+        },
+        publishDraft: async () => {
+            if (!props.id || props.id === 'new') {
+                return
+            }
+            try {
+                const result = await api.hogFlows.publishDraft(props.id)
+                lemonToast.success('Changes published')
+                actions.loadWorkflowSuccess(result)
+            } catch (e) {
+                lemonToast.error('Failed to publish: ' + (e as Error).message)
+            }
+        },
+        discardDraft: async () => {
+            if (!props.id || props.id === 'new') {
+                return
+            }
+            LemonDialog.open({
+                title: 'Discard unpublished changes',
+                description: 'This will revert to the currently live version. Are you sure?',
+                primaryButton: {
+                    children: 'Discard',
+                    onClick: async () => {
+                        try {
+                            const result = await api.hogFlows.discardDraft(props.id!)
+                            lemonToast.success('Draft discarded')
+                            actions.loadWorkflowSuccess(result)
+                        } catch (e) {
+                            lemonToast.error('Failed to discard: ' + (e as Error).message)
+                        }
+                    },
+                },
+                secondaryButton: {
+                    children: 'Cancel',
+                },
+            })
         },
         discardChanges: () => {
             if (!values.originalWorkflow) {
