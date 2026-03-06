@@ -65,7 +65,7 @@ class TestE2EProvisioningFlow(StripeProvisioningTestBase):
         refresh_token = token_data["refresh_token"]
         assert access_token.startswith("pha_")
         assert refresh_token.startswith("phr_")
-        assert token_data["scope"] == "query:read project:read"
+        assert "scope" not in token_data
         assert token_data["account"]["id"]
 
         # 5. Provision a resource
