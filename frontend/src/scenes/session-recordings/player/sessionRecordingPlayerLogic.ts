@@ -54,7 +54,7 @@ import type { sessionRecordingPlayerLogicType } from './sessionRecordingPlayerLo
 import { snapshotDataLogic } from './snapshotDataLogic'
 import { deleteRecording } from './utils/playerUtils'
 import { initialFrameState, resolveFrameTimestamp } from './utils/resolve-frame-timestamp'
-import { selectNewEvents, shouldUpdatePlaybackPosition } from './utils/snapshot-sync'
+import { shouldUpdatePlaybackPosition } from './utils/snapshot-sync'
 import { SessionRecordingPlayerExplorerProps } from './view-explorer/SessionRecordingPlayerExplorer'
 
 const IS_TEST_MODE = process.env.NODE_ENV === 'test'
@@ -1508,7 +1508,7 @@ export const sessionRecordingPlayerLogic = kea<sessionRecordingPlayerLogicType>(
 
             if (values.currentSegment?.windowId !== undefined) {
                 const allSnapshots = values.sessionPlayerData.snapshotsByWindowId[values.currentSegment?.windowId] ?? []
-                eventsToAdd.push(...selectNewEvents(allSnapshots, currentEvents))
+                eventsToAdd.push(...findNewEvents(allSnapshots, currentEvents))
             }
 
             // If replayer isn't initialized, it will be initialized with the already loaded snapshots.

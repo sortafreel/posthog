@@ -471,8 +471,10 @@ export const snapshotDataLogic = kea<snapshotDataLogicType>([
 
         snapshotStore: [
             (s) => [s.storeVersion],
-            (): SnapshotStore | null => {
-                return cache.store ?? null
+            (): SnapshotStore => {
+                // store is always created in afterMount, but we need a fallback
+                // for the brief moment before mount completes
+                return cache.store ?? new SnapshotStore()
             },
         ],
 
