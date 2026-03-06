@@ -4,6 +4,7 @@ from datetime import timedelta
 
 from django.conf import settings
 
+import orjson
 import structlog
 from rest_framework import serializers, viewsets
 from rest_framework.permissions import IsAuthenticated
@@ -91,9 +92,13 @@ class EvaluationRunViewSet(TeamAndOrgViewSetMixin, viewsets.ViewSet):
                 timestamp,
                 team_id,
                 distinct_id,
-                elements_chain,
-                created_at,
-                person_id
+                person_id,
+                input,
+                output,
+                output_choices,
+                input_state,
+                output_state,
+                tools
             FROM ai_events
             WHERE {" AND ".join(where_clauses)}
             LIMIT 1
@@ -105,6 +110,26 @@ class EvaluationRunViewSet(TeamAndOrgViewSetMixin, viewsets.ViewSet):
             return Response({"error": f"Event {target_event_id} not found"}, status=404)
 
         event_data = query_result[0]
+
+        # Merge heavy columns back into properties for the evaluation workflow
+        props = (
+            orjson.loads(event_data["properties"])
+            if isinstance(event_data["properties"], str)
+            else event_data["properties"]
+        )
+        heavy_column_mapping = {
+            "input": "$ai_input",
+            "output": "$ai_output",
+            "output_choices": "$ai_output_choices",
+            "input_state": "$ai_input_state",
+            "output_state": "$ai_output_state",
+            "tools": "$ai_tools",
+        }
+        for col, prop_key in heavy_column_mapping.items():
+            value = event_data.pop(col, "")
+            if value:
+                props[prop_key] = orjson.loads(value) if isinstance(value, str) else value
+        event_data["properties"] = props
 
         # Build workflow inputs
         inputs = RunEvaluationInputs(

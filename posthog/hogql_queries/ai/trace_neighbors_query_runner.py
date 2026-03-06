@@ -62,11 +62,10 @@ class TraceNeighborsQueryRunner(AnalyticsQueryRunner[TraceNeighborsQueryResponse
     def _get_filter_conditions(self) -> ast.Expr:
         """Build the filter conditions, similar to TracesQueryRunner."""
         exprs: list[ast.Expr] = [
-            # Trace ID must exist and not be empty
-            ast.Call(name="isNotNull", args=[ast.Field(chain=["properties", "$ai_trace_id"])]),
+            # Trace ID must not be empty
             ast.CompareOperation(
                 op=ast.CompareOperationOp.NotEq,
-                left=ast.Field(chain=["properties", "$ai_trace_id"]),
+                left=ast.Field(chain=["trace_id"]),
                 right=ast.Constant(value=""),
             ),
             # Date range filter
@@ -167,13 +166,13 @@ class TraceNeighborsQueryRunner(AnalyticsQueryRunner[TraceNeighborsQueryResponse
                 trace_timestamp
             FROM (
                 SELECT
-                    properties.$ai_trace_id as trace_id,
+                    trace_id,
                     max(timestamp) as trace_timestamp
                 FROM ai_events
                 WHERE event IN ('$ai_span', '$ai_generation', '$ai_embedding', '$ai_metric', '$ai_feedback', '$ai_trace')
                   AND timestamp <= {current_timestamp}
                   AND {conditions}
-                GROUP BY properties.$ai_trace_id
+                GROUP BY trace_id
                 HAVING (trace_timestamp, trace_id) < ({current_timestamp}, {current_trace_id})
                 ORDER BY trace_timestamp DESC, trace_id DESC
                 LIMIT 1
@@ -187,13 +186,13 @@ class TraceNeighborsQueryRunner(AnalyticsQueryRunner[TraceNeighborsQueryResponse
                 trace_timestamp
             FROM (
                 SELECT
-                    properties.$ai_trace_id as trace_id,
+                    trace_id,
                     max(timestamp) as trace_timestamp
                 FROM ai_events
                 WHERE event IN ('$ai_span', '$ai_generation', '$ai_embedding', '$ai_metric', '$ai_feedback', '$ai_trace')
                   AND timestamp >= {current_timestamp}
                   AND {conditions}
-                GROUP BY properties.$ai_trace_id
+                GROUP BY trace_id
                 HAVING (trace_timestamp, trace_id) > ({current_timestamp}, {current_trace_id})
                 ORDER BY trace_timestamp ASC, trace_id ASC
                 LIMIT 1

@@ -10,8 +10,8 @@ MV_NAME = f"{TABLE_BASE_NAME}_json_mv"
 
 SHARDING_KEY = "cityHash64(concat(toString(team_id), '-', trace_id, '-', toString(toDate(timestamp))))"
 
-# Heavy AI properties that are stripped from the properties JSON and stored in dedicated columns.
-# These are the same properties stripped by the ingestion layer (emit-event-step.ts).
+# Heavy AI properties that are stored in dedicated columns and stripped from the properties JSON
+# in the materialized view to avoid duplicating large data.
 HEAVY_AI_PROPERTIES = [
     "$ai_input",
     "$ai_output",
@@ -20,6 +20,16 @@ HEAVY_AI_PROPERTIES = [
     "$ai_output_state",
     "$ai_tools",
 ]
+
+
+def _strip_heavy_properties_sql(properties_col: str) -> str:
+    """Strip heavy AI properties from the JSON blob using map filtering."""
+    keys_list = ", ".join(f"'{prop}'" for prop in HEAVY_AI_PROPERTIES)
+    return (
+        f"toJSONString(mapFilter("
+        f"(k, _) -> k NOT IN ({keys_list}), "
+        f"CAST(JSONExtractKeysAndValuesRaw({properties_col}), 'Map(String, String)')))"
+    )
 
 
 def AI_EVENTS_DATA_TABLE_ENGINE():
@@ -54,16 +64,16 @@ CREATE TABLE IF NOT EXISTS {table_name}
 (
     -- Core fields
     uuid UUID,
-    event VARCHAR,
+    event LowCardinality(String),
     timestamp DateTime64(6, 'UTC'),
     team_id Int64,
-    distinct_id VARCHAR,
+    distinct_id String,
     person_id UUID,
-    properties VARCHAR CODEC(ZSTD(3)),
+    properties String DEFAULT '' CODEC(ZSTD(3)),
     retention_days Int16 DEFAULT 30,
 
     -- Trace structure
-    trace_id String,
+    trace_id String DEFAULT '',
     session_id String DEFAULT '',
     parent_id String DEFAULT '',
     span_id String DEFAULT '',
@@ -196,17 +206,8 @@ def KAFKA_AI_EVENTS_TABLE_SQL():
     )
 
 
-def _strip_heavy_properties_sql(properties_col: str) -> str:
-    """Generate nested JSONRemoveKeys calls to strip heavy AI properties from the properties JSON."""
-    result = properties_col
-    for prop in HEAVY_AI_PROPERTIES:
-        result = f"replaceAll({result}, '\"' || '{prop}' || '\":', '')"
-    # Use a simpler approach: build the JSON stripping with JSONExtractKeysAndValues
-    # Actually, use a direct approach: remove keys from the JSON string
-    return properties_col
-
-
 def AI_EVENTS_MV_SQL(target_table: str = WRITABLE_TABLE_NAME):
+    stripped_properties = _strip_heavy_properties_sql("properties")
     return """
 CREATE MATERIALIZED VIEW IF NOT EXISTS {mv_name}
 TO {target_table}
@@ -217,8 +218,7 @@ AS SELECT
     team_id,
     distinct_id,
     person_id,
-    properties,
-    30 AS retention_days,
+    {stripped_properties} AS properties,
 
     -- Trace structure
     JSONExtractString(properties, '$ai_trace_id') AS trace_id,
@@ -292,6 +292,7 @@ FROM {kafka_table}
         mv_name=MV_NAME,
         target_table=target_table,
         kafka_table=KAFKA_TABLE_NAME,
+        stripped_properties=stripped_properties,
     )
 
 

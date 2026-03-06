@@ -92,7 +92,7 @@ class TracesQueryRunner(AnalyticsQueryRunner[TracesQueryResponse]):
                     max(last_ts) as max_timestamp
                 FROM (
                     SELECT
-                        properties.$ai_trace_id as trace_id,
+                        trace_id,
                         min(timestamp) as first_ts,
                         max(timestamp) as last_ts
                     FROM ai_events
@@ -193,8 +193,8 @@ class TracesQueryRunner(AnalyticsQueryRunner[TracesQueryResponse]):
         query = parse_select(
             """
             SELECT
-                properties.$ai_trace_id AS id,
-                any(properties.$ai_session_id) AS ai_session_id,
+                trace_id AS id,
+                any(session_id) AS ai_session_id,
                 min(timestamp) AS first_timestamp,
                 ifNull(
                     nullIf(argMinIf(distinct_id, timestamp, event = '$ai_trace'), ''),
@@ -203,36 +203,36 @@ class TracesQueryRunner(AnalyticsQueryRunner[TracesQueryResponse]):
                 round(
                     CASE
                         -- If all events with latency are generations, sum them all
-                        WHEN countIf(toFloat(properties.$ai_latency) > 0 AND event != '$ai_generation') = 0
-                             AND countIf(toFloat(properties.$ai_latency) > 0 AND event = '$ai_generation') > 0
-                        THEN sumIf(toFloat(properties.$ai_latency),
-                                   event = '$ai_generation' AND toFloat(properties.$ai_latency) > 0
+                        WHEN countIf(latency > 0 AND event != '$ai_generation') = 0
+                             AND countIf(latency > 0 AND event = '$ai_generation') > 0
+                        THEN sumIf(latency,
+                                   event = '$ai_generation' AND latency > 0
                              )
                         -- Otherwise sum the direct children of the trace
-                        ELSE sumIf(toFloat(properties.$ai_latency),
-                                   properties.$ai_parent_id IS NULL
-                                   OR toString(properties.$ai_parent_id) = toString(properties.$ai_trace_id)
+                        ELSE sumIf(latency,
+                                   parent_id = ''
+                                   OR parent_id = trace_id
                              )
                     END, 2
                 ) AS total_latency,
-                sumIf(toFloat(properties.$ai_input_tokens),
+                sumIf(input_tokens,
                       event IN ('$ai_generation', '$ai_embedding')
                 ) AS input_tokens,
-                sumIf(toFloat(properties.$ai_output_tokens),
+                sumIf(output_tokens,
                       event IN ('$ai_generation', '$ai_embedding')
                 ) AS output_tokens,
                 round(
-                    sumIf(toFloat(properties.$ai_input_cost_usd),
+                    sumIf(input_cost_usd,
                           event IN ('$ai_generation', '$ai_embedding')
                     ), 10
                 ) AS input_cost,
                 round(
-                    sumIf(toFloat(properties.$ai_output_cost_usd),
+                    sumIf(output_cost_usd,
                           event IN ('$ai_generation', '$ai_embedding')
                     ), 10
                 ) AS output_cost,
                 round(
-                    sumIf(toFloat(properties.$ai_total_cost_usd),
+                    sumIf(total_cost_usd,
                           event IN ('$ai_generation', '$ai_embedding')
                     ), 10
                 ) AS total_cost,
@@ -240,7 +240,7 @@ class TracesQueryRunner(AnalyticsQueryRunner[TracesQueryResponse]):
                     arraySort(x -> x.3,
                         groupArrayIf(
                             tuple(uuid, event, timestamp, properties),
-                            event IN ('$ai_metric', '$ai_feedback') OR toString(properties.$ai_parent_id) = toString(properties.$ai_trace_id)
+                            event IN ('$ai_metric', '$ai_feedback') OR parent_id = trace_id
                         )
                     )
                 ) AS events,
@@ -252,17 +252,17 @@ class TracesQueryRunner(AnalyticsQueryRunner[TracesQueryResponse]):
                 ) AS output_state,
                 ifNull(
                     argMinIf(
-                        ifNull(properties.$ai_span_name, properties.$ai_trace_name),
+                        ifNull(nullIf(span_name, ''), nullIf(trace_name, '')),
                         timestamp,
                         event = '$ai_trace'
                     ),
                     argMin(
-                        ifNull(properties.$ai_span_name, properties.$ai_trace_name),
+                        ifNull(nullIf(span_name, ''), nullIf(trace_name, '')),
                         timestamp,
                     )
                 ) AS trace_name,
                 countIf(
-                    isNotNull(properties.$ai_error) OR properties.$ai_is_error = 'true'
+                    is_error = 1
                 ) AS error_count,
                 any(properties.ai_support_impersonated) AS is_support_trace,
                 arrayFilter(
@@ -286,7 +286,7 @@ class TracesQueryRunner(AnalyticsQueryRunner[TracesQueryResponse]):
                 '$ai_span', '$ai_generation', '$ai_embedding', '$ai_metric', '$ai_feedback', '$ai_trace'
             )
               AND {filter_conditions}
-            GROUP BY properties.$ai_trace_id
+            GROUP BY trace_id
             ORDER BY first_timestamp DESC
             """,
         )
@@ -296,7 +296,7 @@ class TracesQueryRunner(AnalyticsQueryRunner[TracesQueryResponse]):
 
         trace_id_filter = ast.CompareOperation(
             op=ast.CompareOperationOp.In,
-            left=ast.Field(chain=["properties", "$ai_trace_id"]),
+            left=ast.Field(chain=["trace_id"]),
             right=trace_ids_tuple,
         )
 
@@ -412,10 +412,9 @@ class TracesQueryRunner(AnalyticsQueryRunner[TracesQueryResponse]):
 
     def _get_subquery_filter(self) -> ast.Expr:
         exprs: list[ast.Expr] = [
-            ast.Call(name="isNotNull", args=[ast.Field(chain=["properties", "$ai_trace_id"])]),
             ast.CompareOperation(
                 op=ast.CompareOperationOp.NotEq,
-                left=ast.Field(chain=["properties", "$ai_trace_id"]),
+                left=ast.Field(chain=["trace_id"]),
                 right=ast.Constant(value=""),
             ),
             self._get_where_clause(),

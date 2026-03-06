@@ -85,8 +85,8 @@ class TraceQueryRunner(AnalyticsQueryRunner[TraceQueryResponse]):
         query = parse_select(
             """
             SELECT
-                properties.$ai_trace_id AS id,
-                any(properties.$ai_session_id) AS ai_session_id,
+                trace_id AS id,
+                any(session_id) AS ai_session_id,
                 min(timestamp) AS first_timestamp,
                 ifNull(
                     nullIf(argMinIf(distinct_id, timestamp, event = '$ai_trace'), ''),
@@ -95,36 +95,36 @@ class TraceQueryRunner(AnalyticsQueryRunner[TraceQueryResponse]):
                 round(
                     CASE
                         -- If all events with latency are generations, sum them all
-                        WHEN countIf(toFloat(properties.$ai_latency) > 0 AND event != '$ai_generation') = 0
-                             AND countIf(toFloat(properties.$ai_latency) > 0 AND event = '$ai_generation') > 0
-                        THEN sumIf(toFloat(properties.$ai_latency),
-                                   event = '$ai_generation' AND toFloat(properties.$ai_latency) > 0
+                        WHEN countIf(latency > 0 AND event != '$ai_generation') = 0
+                             AND countIf(latency > 0 AND event = '$ai_generation') > 0
+                        THEN sumIf(latency,
+                                   event = '$ai_generation' AND latency > 0
                              )
                         -- Otherwise sum the direct children of the trace
-                        ELSE sumIf(toFloat(properties.$ai_latency),
-                                   properties.$ai_parent_id IS NULL
-                                   OR toString(properties.$ai_parent_id) = toString(properties.$ai_trace_id)
+                        ELSE sumIf(latency,
+                                   parent_id = ''
+                                   OR parent_id = trace_id
                              )
                     END, 2
                 ) AS total_latency,
-                sumIf(toFloat(properties.$ai_input_tokens),
+                sumIf(input_tokens,
                       event IN ('$ai_generation', '$ai_embedding')
                 ) AS input_tokens,
-                sumIf(toFloat(properties.$ai_output_tokens),
+                sumIf(output_tokens,
                       event IN ('$ai_generation', '$ai_embedding')
                 ) AS output_tokens,
                 round(
-                    sumIf(toFloat(properties.$ai_input_cost_usd),
+                    sumIf(input_cost_usd,
                           event IN ('$ai_generation', '$ai_embedding')
                     ), 10
                 ) AS input_cost,
                 round(
-                    sumIf(toFloat(properties.$ai_output_cost_usd),
+                    sumIf(output_cost_usd,
                           event IN ('$ai_generation', '$ai_embedding')
                     ), 10
                 ) AS output_cost,
                 round(
-                    sumIf(toFloat(properties.$ai_total_cost_usd),
+                    sumIf(total_cost_usd,
                           event IN ('$ai_generation', '$ai_embedding')
                     ), 10
                 ) AS total_cost,
@@ -145,12 +145,12 @@ class TraceQueryRunner(AnalyticsQueryRunner[TraceQueryResponse]):
                 ) AS output_state,
                 ifNull(
                     argMinIf(
-                        ifNull(properties.$ai_span_name, properties.$ai_trace_name),
+                        ifNull(nullIf(span_name, ''), nullIf(trace_name, '')),
                         timestamp,
                         event = '$ai_trace'
                     ),
                     argMin(
-                        ifNull(properties.$ai_span_name, properties.$ai_trace_name),
+                        ifNull(nullIf(span_name, ''), nullIf(trace_name, '')),
                         timestamp,
                     )
                 ) AS trace_name
@@ -159,7 +159,7 @@ class TraceQueryRunner(AnalyticsQueryRunner[TraceQueryResponse]):
                 '$ai_span', '$ai_generation', '$ai_embedding', '$ai_metric', '$ai_feedback', '$ai_trace'
             )
               AND {filter_conditions}
-            GROUP BY properties.$ai_trace_id
+            GROUP BY trace_id
             LIMIT 1
             """,
         )
@@ -268,7 +268,7 @@ class TraceQueryRunner(AnalyticsQueryRunner[TraceQueryResponse]):
 
         where_exprs.append(
             ast.CompareOperation(
-                left=ast.Field(chain=["properties", "$ai_trace_id"]),
+                left=ast.Field(chain=["trace_id"]),
                 op=ast.CompareOperationOp.Eq,
                 right=ast.Constant(value=self.query.traceId),
             ),
