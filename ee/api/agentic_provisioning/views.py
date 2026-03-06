@@ -6,6 +6,7 @@ from django.core.cache import cache
 from django.db import IntegrityError
 from django.utils import timezone
 
+import structlog
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -18,6 +19,8 @@ from posthog.models.utils import generate_random_oauth_access_token, generate_ra
 from . import AUTH_CODE_CACHE_PREFIX
 from .region_proxy import stripe_region_proxy
 from .signature import SUPPORTED_VERSIONS, verify_stripe_signature
+
+logger = structlog.get_logger(__name__)
 
 AUTH_CODE_TTL_SECONDS = 300
 
@@ -341,7 +344,10 @@ def _get_stripe_oauth_app():
         try:
             return OAuthApplication.objects.get(client_id=settings.STRIPE_POSTHOG_OAUTH_CLIENT_ID)
         except OAuthApplication.DoesNotExist:
-            pass
+            logger.warning(
+                "stripe_app.oauth_app.client_id_not_found",
+                client_id=settings.STRIPE_POSTHOG_OAUTH_CLIENT_ID,
+            )
 
     existing = OAuthApplication.objects.filter(name=STRIPE_APP_NAME).first()
     if existing:
