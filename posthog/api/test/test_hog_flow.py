@@ -1739,3 +1739,46 @@ class TestHogFlowRevisionAPI(APIBaseTest):
         flow = HogFlow.objects.get(pk=flow_id)
         assert flow.name == "Renamed"
         assert flow.active_revision.name == "Renamed"
+
+    def test_disable_and_reenable_preserves_active_revision(self):
+        flow_id = self._create_active_flow()
+        flow = HogFlow.objects.get(pk=flow_id)
+        original_revision_id = flow.active_revision_id
+
+        # Disable: active -> draft
+        response = self.client.patch(
+            f"/api/projects/{self.team.id}/hog_flows/{flow_id}",
+            {"status": "draft"},
+        )
+        assert response.status_code == 200, response.json()
+        flow.refresh_from_db()
+        assert flow.status == "draft"
+        assert flow.active_revision_id == original_revision_id
+
+        # Re-enable: draft -> active (should NOT create a new revision)
+        response = self.client.patch(
+            f"/api/projects/{self.team.id}/hog_flows/{flow_id}",
+            {"status": "active"},
+        )
+        assert response.status_code == 200, response.json()
+        flow.refresh_from_db()
+        assert flow.status == "active"
+        assert flow.active_revision_id == original_revision_id
+        assert HogFlowRevision.objects.filter(hog_flow_id=flow_id).count() == 1
+
+    def test_disable_preserves_draft_revision(self):
+        flow_id = self._create_active_flow()
+        self.client.patch(
+            f"/api/projects/{self.team.id}/hog_flows/{flow_id}/draft",
+            {"name": "Pending changes"},
+        )
+        assert HogFlowRevision.objects.filter(hog_flow_id=flow_id).count() == 2
+
+        # Disable should not delete the draft revision
+        response = self.client.patch(
+            f"/api/projects/{self.team.id}/hog_flows/{flow_id}",
+            {"status": "draft"},
+        )
+        assert response.status_code == 200, response.json()
+        assert HogFlowRevision.objects.filter(hog_flow_id=flow_id).count() == 2
+        assert HogFlowRevision.objects.filter(hog_flow_id=flow_id, status=HogFlowRevision.State.DRAFT).exists()

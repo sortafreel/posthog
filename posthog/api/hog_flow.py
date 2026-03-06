@@ -394,11 +394,16 @@ class HogFlowSerializer(HogFlowMinimalSerializer):
 
     def update(self, instance, validated_data):
         was_draft = instance.status == HogFlow.State.DRAFT
+        had_active_revision = instance.active_revision_id is not None
         result = super().update(instance, validated_data)
         is_now_active = result.status == HogFlow.State.ACTIVE
 
-        if was_draft and is_now_active:
-            # Activating a draft workflow: promote its draft revision to active
+        if was_draft and is_now_active and had_active_revision:
+            # Re-enabling a previously disabled workflow: just toggle status back.
+            # The active_revision already points to the correct revision.
+            pass
+        elif was_draft and is_now_active:
+            # Activating a draft workflow for the first time: promote its draft revision to active
             revision = _get_draft_revision(result) or result.revisions.order_by("-version").first()
             if revision:
                 for field in CONTENT_FIELDS:

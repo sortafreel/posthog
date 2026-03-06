@@ -96,13 +96,11 @@ export const WorkflowSceneHeader = (props: WorkflowSceneLogicProps = {}): JSX.El
                                     }
                                     size="small"
                                     disabledReason={
-                                        showDraftControls
-                                            ? 'Publish or discard draft first'
-                                            : workflowChanged
-                                              ? 'Save changes first'
-                                              : workflow?.status === 'draft' && workflowHasActionErrors
-                                                ? 'Fix all errors before enabling'
-                                                : undefined
+                                        workflowChanged && !showDraftControls
+                                            ? 'Save changes first'
+                                            : workflow?.status === 'draft' && workflowHasActionErrors
+                                              ? 'Fix all errors before enabling'
+                                              : undefined
                                     }
                                     className="transition-colors duration-300 ease-in-out"
                                     data-attr="workflow-launch"

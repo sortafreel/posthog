@@ -564,6 +564,18 @@ export const workflowLogic = kea<workflowLogicType>([
     listeners(({ actions, values, props }) => ({
         saveWorkflowPartial: async ({ workflow }) => {
             const merged = { ...values.workflow, ...workflow }
+
+            // Status-only change (enable/disable): bypass draft flow, update HogFlow directly
+            if (workflow.status && Object.keys(workflow).length === 1 && props.id && props.id !== 'new') {
+                if (workflow.status === 'active' && values.workflowHasActionErrors) {
+                    lemonToast.error('Fix all errors before enabling')
+                    return
+                }
+                const result = await api.hogFlows.updateHogFlow(props.id, { status: workflow.status })
+                actions.loadWorkflowSuccess(result)
+                return
+            }
+
             if (merged.status === 'active' && values.workflowHasActionErrors) {
                 lemonToast.error('Fix all errors before enabling')
                 return
