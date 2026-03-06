@@ -1616,3 +1616,126 @@ class TestHogFlowRevisionAPI(APIBaseTest):
 
         self.client.post(f"/api/projects/{self.team.id}/hog_flows/{flow_id}/discard_draft")
         assert HogFlowRevision.objects.filter(hog_flow_id=flow_id).count() == 2
+
+    def test_publish_strips_deleted_actions(self):
+        flow_id = self._create_active_flow()
+        flow = HogFlow.objects.get(pk=flow_id)
+        original_action_count = len(flow.actions)
+
+        # Save draft with action_1 removed (only trigger remains)
+        self.client.patch(
+            f"/api/projects/{self.team.id}/hog_flows/{flow_id}/draft",
+            {
+                "actions": [
+                    {
+                        "id": "trigger_node",
+                        "name": "trigger_1",
+                        "type": "trigger",
+                        "config": {
+                            "type": "event",
+                            "filters": {
+                                "events": [{"id": "$pageview", "name": "$pageview", "type": "events", "order": 0}],
+                            },
+                        },
+                    },
+                ],
+                "edges": [],
+            },
+        )
+
+        response = self.client.post(f"/api/projects/{self.team.id}/hog_flows/{flow_id}/publish")
+        assert response.status_code == 200, response.json()
+
+        flow.refresh_from_db()
+        assert len(flow.actions) < original_action_count
+        assert all(a["id"] != "action_1" for a in flow.actions)
+
+    def test_draft_response_includes_full_content(self):
+        flow_id = self._create_active_flow()
+        self.client.patch(
+            f"/api/projects/{self.team.id}/hog_flows/{flow_id}/draft",
+            {"name": "Draft Name", "description": "Draft desc"},
+        )
+
+        response = self.client.get(f"/api/projects/{self.team.id}/hog_flows/{flow_id}")
+        assert response.status_code == 200, response.json()
+
+        draft = response.json()["draft"]
+        assert draft is not None
+        assert draft["name"] == "Draft Name"
+        assert draft["description"] == "Draft desc"
+        assert "actions" in draft
+        assert "edges" in draft
+        assert "updated_at" in draft
+
+    def test_save_draft_lenient_validation(self):
+        flow_id = self._create_active_flow()
+        # Save a draft with an action missing required template inputs — should succeed
+        response = self.client.patch(
+            f"/api/projects/{self.team.id}/hog_flows/{flow_id}/draft",
+            {
+                "actions": [
+                    {
+                        "id": "trigger_node",
+                        "name": "trigger_1",
+                        "type": "trigger",
+                        "config": {"type": "event", "filters": {}},
+                    },
+                    {
+                        "id": "action_1",
+                        "name": "action_1",
+                        "type": "function",
+                        "config": {
+                            "template_id": "template-webhook",
+                            "inputs": {},
+                        },
+                    },
+                ],
+            },
+        )
+        assert response.status_code == 200, response.json()
+
+    def test_publish_strict_validation_rejects_invalid_draft(self):
+        flow_id = self._create_active_flow()
+        # Save a draft with an invalid trigger (no type) — lenient, succeeds
+        self.client.patch(
+            f"/api/projects/{self.team.id}/hog_flows/{flow_id}/draft",
+            {
+                "actions": [
+                    {
+                        "id": "trigger_node",
+                        "name": "trigger_1",
+                        "type": "trigger",
+                        "config": {},
+                    },
+                ],
+                "edges": [],
+            },
+        )
+
+        # Publish should reject it with strict validation
+        response = self.client.post(f"/api/projects/{self.team.id}/hog_flows/{flow_id}/publish")
+        assert response.status_code == 400
+
+    def test_discard_draft_noop_when_no_draft(self):
+        flow_id = self._create_active_flow()
+        response = self.client.post(f"/api/projects/{self.team.id}/hog_flows/{flow_id}/discard_draft")
+        assert response.status_code == 200, response.json()
+        assert response.json()["draft"] is None
+        assert HogFlowRevision.objects.filter(hog_flow_id=flow_id).count() == 1
+
+    def test_metadata_update_syncs_to_active_and_draft_revisions(self):
+        flow_id = self._create_active_flow()
+        self.client.patch(
+            f"/api/projects/{self.team.id}/hog_flows/{flow_id}/draft",
+            {"description": "Draft work"},
+        )
+
+        self.client.patch(
+            f"/api/projects/{self.team.id}/hog_flows/{flow_id}",
+            {"name": "Renamed"},
+        )
+
+        flow = HogFlow.objects.get(pk=flow_id)
+        assert flow.name == "Renamed"
+        assert flow.active_revision.name == "Renamed"
