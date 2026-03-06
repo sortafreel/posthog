@@ -21,7 +21,8 @@ export async function rasterizeRecordingActivity(input: RasterizeRecordingInput)
     }
 
     const id = randomUUID()
-    const tmpFile = (label: string) => path.join(os.tmpdir(), `ph-video-${label}-${id}.mp4`)
+    const workDir = process.env.VIDEO_WORK_DIR || os.tmpdir()
+    const tmpFile = (label: string) => path.join(workDir, `ph-video-${label}-${id}.mp4`)
     const rawPath = tmpFile('raw')
     const processedPath = tmpFile('out')
 
