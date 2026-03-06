@@ -12,6 +12,7 @@ from rest_framework.test import APIRequestFactory
 from ee.api.agentic_provisioning import AUTH_CODE_CACHE_PREFIX
 from ee.api.agentic_provisioning.region_proxy import (
     _proxy_to_region,
+    _should_proxy_bearer_lookup,
     _should_proxy_body_region,
     _should_proxy_token_lookup,
 )
@@ -20,8 +21,10 @@ from ee.api.agentic_provisioning.test.base import StripeProvisioningTestBase
 factory = APIRequestFactory()
 
 
-def _make_drf_request(data=None):
+def _make_drf_request(data=None, bearer_token=None):
     raw = factory.post("/", data=data or {}, format="json")
+    if bearer_token is not None:
+        raw.META["HTTP_AUTHORIZATION"] = f"Bearer {bearer_token}"
     return Request(raw, parsers=[JSONParser()])
 
 
@@ -118,6 +121,27 @@ class TestProxyHeaderAllowlist(BaseTest):
         assert forwarded_headers["Host"] == "eu.posthog.com"
 
 
+class TestShouldProxyBearerLookup(BaseTest):
+    @patch("ee.api.stripe_provisioning.region_proxy.find_oauth_access_token", return_value=None)
+    def test_proxies_when_token_not_in_db(self, mock_find):
+        request = _make_drf_request(bearer_token="unknown_token")
+        assert _should_proxy_bearer_lookup(request, "US") is True
+
+    @patch("ee.api.stripe_provisioning.region_proxy.find_oauth_access_token")
+    def test_skips_when_token_in_db(self, mock_find):
+        mock_find.return_value = MagicMock()
+        request = _make_drf_request(bearer_token="known_token")
+        assert _should_proxy_bearer_lookup(request, "US") is False
+
+    def test_skips_when_no_auth_header(self):
+        request = _make_drf_request()
+        assert _should_proxy_bearer_lookup(request, "US") is False
+
+    def test_skips_when_empty_token(self):
+        request = _make_drf_request(bearer_token="")
+        assert _should_proxy_bearer_lookup(request, "US") is False
+
+
 class TestDecoratorIntegration(StripeProvisioningTestBase):
     @override_settings(CLOUD_DEPLOYMENT="US")
     def test_hmac_failure_returns_401_without_proxying(self):
@@ -170,3 +194,15 @@ class TestDecoratorIntegration(StripeProvisioningTestBase):
         res = self._post_signed("/api/agentic/provisioning/account_requests", data=payload)
         assert res.status_code == 200
         assert res.json()["type"] == "oauth"
+
+    @override_settings(CLOUD_DEPLOYMENT="US")
+    @patch("ee.api.stripe_provisioning.region_proxy._proxy_to_region")
+    @patch("ee.api.stripe_provisioning.region_proxy.find_oauth_access_token", return_value=None)
+    def test_bearer_proxy_failure_falls_through(self, mock_find, mock_proxy):
+        import requests as req_lib
+
+        mock_proxy.side_effect = req_lib.exceptions.ConnectionError("connection refused")
+        token = self._get_bearer_token()
+        res = self._post_signed_with_bearer("/api/agentic/provisioning/resources", data={}, token=token)
+        assert res.status_code == 200
+        mock_proxy.assert_called_once()

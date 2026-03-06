@@ -10,7 +10,7 @@ import structlog
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from posthog.models.oauth import find_oauth_refresh_token
+from posthog.models.oauth import find_oauth_access_token, find_oauth_refresh_token
 from posthog.security.outbound_proxy import external_requests
 from posthog.utils import get_instance_region
 
@@ -114,9 +114,20 @@ def _should_proxy_token_lookup(request: Request, current_region: str) -> bool:
     return False
 
 
+def _should_proxy_bearer_lookup(request: Request, current_region: str) -> bool:
+    auth_header = request.META.get("HTTP_AUTHORIZATION", "")
+    if not auth_header.startswith("Bearer "):
+        return False
+    token_value = auth_header[len("Bearer ") :]
+    if not token_value:
+        return False
+    return find_oauth_access_token(token_value) is None
+
+
 _STRATEGY_CHECKS = {
     "body_region": _should_proxy_body_region,
     "token_lookup": _should_proxy_token_lookup,
+    "bearer_lookup": _should_proxy_bearer_lookup,
 }
 
 

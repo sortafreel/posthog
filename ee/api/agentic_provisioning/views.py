@@ -23,6 +23,7 @@ from posthog.models.oauth import OAuthAccessToken, OAuthApplication, OAuthRefres
 from posthog.models.team.team import Team
 from posthog.models.user import User
 from posthog.models.utils import generate_random_oauth_access_token, generate_random_oauth_refresh_token
+from posthog.utils import get_instance_region
 
 from . import AUTH_CODE_CACHE_PREFIX, STRIPE_APP_NAME
 from .authentication import StripeProvisioningBearerAuthentication
@@ -381,11 +382,8 @@ def _exchange_refresh_token(request: Request) -> Response:
 @api_view(["POST"])
 @authentication_classes([])
 @permission_classes([])
+@stripe_region_proxy(strategy="bearer_lookup")
 def provisioning_resources_create(request: Request) -> Response:
-    error = verify_stripe_signature(request)
-    if error:
-        return error
-
     auth_error, user, access_token = _authenticate_bearer(request)
     if auth_error:
         return auth_error
@@ -438,11 +436,8 @@ def provisioning_resources_create(request: Request) -> Response:
 @api_view(["GET"])
 @authentication_classes([])
 @permission_classes([])
+@stripe_region_proxy(strategy="bearer_lookup")
 def provisioning_resource_detail(request: Request, resource_id: str) -> Response:
-    error = verify_stripe_signature(request)
-    if error:
-        return error
-
     auth_error, user, access_token = _authenticate_bearer(request)
     if auth_error:
         return auth_error
@@ -506,11 +501,8 @@ def provisioning_resource_detail(request: Request, resource_id: str) -> Response
 @api_view(["POST"])
 @authentication_classes([])
 @permission_classes([])
+@stripe_region_proxy(strategy="bearer_lookup")
 def deep_links(request: Request) -> Response:
-    error = verify_stripe_signature(request)
-    if error:
-        return error
-
     auth_error, user, access_token = _authenticate_bearer(request)
     if auth_error:
         return auth_error
