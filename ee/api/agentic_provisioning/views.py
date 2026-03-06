@@ -13,6 +13,7 @@ from posthog.models.integration import StripeIntegration
 from posthog.models.oauth import OAuthAccessToken, OAuthRefreshToken, find_oauth_refresh_token
 from posthog.models.user import User
 from posthog.models.utils import generate_random_oauth_access_token, generate_random_oauth_refresh_token
+from posthog.utils import get_instance_region
 
 from .signature import SUPPORTED_VERSIONS, verify_stripe_signature
 
@@ -106,7 +107,20 @@ def account_requests(request: Request) -> Response:
     if orchestrator.get("type") == "stripe" and orchestrator.get("stripe"):
         stripe_account_id = orchestrator["stripe"].get("account", "")
 
-    region = configuration.get("region", "US").upper()
+    region = (configuration.get("region") or "US").upper()
+
+    instance_region = (get_instance_region() or "").upper()
+    if instance_region and instance_region not in ("DEV", "LOCAL") and region != instance_region:
+        return Response(
+            {
+                "type": "error",
+                "error": {
+                    "code": "region_mismatch",
+                    "message": f"This instance serves the {instance_region} region. Use the {region} endpoint instead.",
+                },
+            },
+            status=400,
+        )
 
     existing_user = User.objects.filter(email=email).first()
 
