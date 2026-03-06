@@ -13,24 +13,38 @@ import { useInsightTooltip } from 'scenes/insights/useInsightTooltip'
 import { teamLogic } from 'scenes/teamLogic'
 import { openPersonsModal } from 'scenes/trends/persons-modal/PersonsModal'
 
-import { BoxPlotDatum, InsightActorsQuery, NodeKind } from '~/queries/schema/schema-general'
+import { InsightActorsQuery, NodeKind } from '~/queries/schema/schema-general'
 import { ChartParams } from '~/types'
 
-import { boxPlotChartLogic } from './boxPlotChartLogic'
+import { BoxPlotSeriesData, boxPlotChartLogic } from './boxPlotChartLogic'
 
 const BOX_PLOT_STATS = ['Max', '75th percentile', 'Median', 'Mean', '25th percentile', 'Min'] as const
 
-function boxPlotDatumToSeriesData(data: BoxPlotDatum): SeriesDatum[] {
-    const values = [data.max, data.p75, data.median, data.mean, data.p25, data.min]
-    return BOX_PLOT_STATS.map((stat, idx) => ({
-        id: idx,
-        dataIndex: 0,
-        datasetIndex: 0,
-        label: stat,
-        order: idx,
-        color: getSeriesColor(0),
-        count: values[idx],
-    }))
+function seriesDataToTooltip(seriesGroups: BoxPlotSeriesData[], dataIndex: number): SeriesDatum[] {
+    const result: SeriesDatum[] = []
+    for (const group of seriesGroups) {
+        const datum = group.rawData[dataIndex]
+        if (!datum) {
+            continue
+        }
+        const values = [datum.max, datum.p75, datum.median, datum.mean, datum.p25, datum.min]
+        const showSeriesLabel = seriesGroups.length > 1
+        for (let statIdx = 0; statIdx < BOX_PLOT_STATS.length; statIdx++) {
+            const label = showSeriesLabel
+                ? `${group.seriesLabel} - ${BOX_PLOT_STATS[statIdx]}`
+                : BOX_PLOT_STATS[statIdx]
+            result.push({
+                id: group.seriesIndex * BOX_PLOT_STATS.length + statIdx,
+                dataIndex,
+                datasetIndex: group.seriesIndex,
+                label,
+                order: group.seriesIndex * BOX_PLOT_STATS.length + statIdx,
+                color: getSeriesColor(group.seriesIndex),
+                count: values[statIdx],
+            })
+        }
+    }
+    return result
 }
 
 function getNearestDataIndex(chart: Chart, event: ChartEvent | { x: number; y: number }): number | null {
@@ -58,20 +72,19 @@ function getNearestDataIndex(chart: Chart, event: ChartEvent | { x: number; y: n
 
 export function BoxPlotChart({ showPersonsModal = true }: ChartParams): JSX.Element {
     const { insightProps } = useValues(insightLogic)
-    const { boxplotData, chartData, labels, yAxisScaleType, querySource, interval, insightData } = useValues(
+    const { boxplotData, seriesGroups, labels, yAxisScaleType, querySource, interval, insightData } = useValues(
         boxPlotChartLogic(insightProps)
     )
     const { timezone, weekStartDay } = useValues(teamLogic)
 
     const colors = getGraphColors()
-    const seriesColor = getSeriesColor(0)
 
     const { getTooltip, hideTooltip, positionTooltip } = useInsightTooltip()
     const activeIndexRef = useRef<number | null>(null)
 
     const showTooltipForIndex = useCallback(
         (chart: Chart, dataIndex: number, caretX: number, caretY: number) => {
-            if (!boxplotData?.[dataIndex]) {
+            if (!seriesGroups.length || !seriesGroups[0]?.rawData[dataIndex]) {
                 return
             }
             const [tooltipRoot, tooltipEl] = getTooltip()
@@ -79,8 +92,8 @@ export function BoxPlotChart({ showPersonsModal = true }: ChartParams): JSX.Elem
             tooltipEl.classList.add('no-transform')
             tooltipEl.style.opacity = '1'
 
-            const datum = boxplotData[dataIndex]
-            const seriesData = boxPlotDatumToSeriesData(datum)
+            const seriesData = seriesDataToTooltip(seriesGroups, dataIndex)
+            const datum = seriesGroups[0].rawData[dataIndex]
 
             tooltipRoot.render(
                 <InsightTooltip
@@ -89,7 +102,7 @@ export function BoxPlotChart({ showPersonsModal = true }: ChartParams): JSX.Elem
                     seriesData={seriesData}
                     interval={interval}
                     dateRange={insightData?.resolved_date_range}
-                    hideColorCol
+                    hideColorCol={seriesGroups.length === 1}
                     renderSeries={(value) => <div className="datum-label-column">{value}</div>}
                     renderCount={(value: number) => value.toLocaleString()}
                     hideInspectActorsSection={!showPersonsModal}
@@ -100,7 +113,7 @@ export function BoxPlotChart({ showPersonsModal = true }: ChartParams): JSX.Elem
             const bounds = chart.canvas.getBoundingClientRect()
             positionTooltip(tooltipEl, bounds, caretX, caretY, true)
         },
-        [boxplotData, getTooltip, positionTooltip, timezone, interval, insightData, showPersonsModal]
+        [seriesGroups, getTooltip, positionTooltip, timezone, interval, insightData, showPersonsModal]
     )
 
     const handleClick = useCallback(
@@ -109,11 +122,11 @@ export function BoxPlotChart({ showPersonsModal = true }: ChartParams): JSX.Elem
                 return
             }
             const dataIndex = getNearestDataIndex(chart, event)
-            if (dataIndex === null || !boxplotData?.[dataIndex]) {
+            if (dataIndex === null || !seriesGroups[0]?.rawData[dataIndex]) {
                 return
             }
 
-            const datum = boxplotData[dataIndex]
+            const datum = seriesGroups[0].rawData[dataIndex]
             const day = datum.day
 
             const actorsQuery: InsightActorsQuery = {
@@ -145,34 +158,37 @@ export function BoxPlotChart({ showPersonsModal = true }: ChartParams): JSX.Elem
                 orderBy: ['event_count DESC, actor_id DESC'],
             })
         },
-        [showPersonsModal, querySource, boxplotData, interval, insightData, timezone, weekStartDay]
+        [showPersonsModal, querySource, seriesGroups, interval, insightData, timezone, weekStartDay]
     )
 
     const { canvasRef } = useChart({
         getConfig: () => {
-            if (!boxplotData || boxplotData.length === 0) {
+            if (!boxplotData || boxplotData.length === 0 || seriesGroups.length === 0) {
                 return null
             }
+
+            const datasets = seriesGroups.map((group) => {
+                const seriesColor = getSeriesColor(group.seriesIndex)
+                return {
+                    label: group.seriesLabel,
+                    data: group.data,
+                    backgroundColor: `${seriesColor}40`,
+                    borderColor: seriesColor,
+                    borderWidth: 1.5,
+                    medianColor: seriesColor,
+                    meanBackgroundColor: `${seriesColor}80`,
+                    meanBorderColor: seriesColor,
+                    meanRadius: 3,
+                    outlierBackgroundColor: `${seriesColor}80`,
+                    outlierBorderColor: seriesColor,
+                }
+            })
 
             return {
                 type: 'boxplot' as const,
                 data: {
                     labels,
-                    datasets: [
-                        {
-                            label: 'Distribution',
-                            data: chartData,
-                            backgroundColor: `${seriesColor}40`,
-                            borderColor: seriesColor,
-                            borderWidth: 1.5,
-                            medianColor: seriesColor,
-                            meanBackgroundColor: `${seriesColor}80`,
-                            meanBorderColor: seriesColor,
-                            meanRadius: 3,
-                            outlierBackgroundColor: `${seriesColor}80`,
-                            outlierBorderColor: seriesColor,
-                        },
-                    ],
+                    datasets,
                 },
                 options: {
                     responsive: true,
@@ -203,7 +219,7 @@ export function BoxPlotChart({ showPersonsModal = true }: ChartParams): JSX.Elem
                         chart.canvas.style.cursor = showPersonsModal ? 'pointer' : 'default'
                     },
                     plugins: {
-                        legend: { display: false },
+                        legend: { display: seriesGroups.length > 1 },
                         tooltip: { enabled: false },
                         crosshair: false as const,
                         zoom: { zoom: { drag: { enabled: false } } },
@@ -233,9 +249,9 @@ export function BoxPlotChart({ showPersonsModal = true }: ChartParams): JSX.Elem
             } as ChartConfiguration<'boxplot'>
         },
         deps: [
-            chartData,
+            boxplotData,
+            seriesGroups,
             labels,
-            seriesColor,
             colors,
             showTooltipForIndex,
             hideTooltip,
@@ -256,7 +272,7 @@ export function BoxPlotChart({ showPersonsModal = true }: ChartParams): JSX.Elem
         }
         canvas.addEventListener('mouseleave', onMouseLeave)
         return () => canvas.removeEventListener('mouseleave', onMouseLeave)
-    }, [hideTooltip])
+    }, [hideTooltip, canvasRef.current])
 
     if (!boxplotData || boxplotData.length === 0) {
         return <div className="flex items-center justify-center h-full text-muted">No data for this time range</div>

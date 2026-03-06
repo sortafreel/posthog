@@ -29,7 +29,6 @@ export const NON_BREAKDOWN_DISPLAY_TYPES = [
     ChartDisplayType.BoldNumber,
     ChartDisplayType.CalendarHeatmap,
     ChartDisplayType.TwoDimensionalHeatmap,
-    ChartDisplayType.BoxPlot,
 ]
 /** Display types which only work with a single series. */
 export const SINGLE_SERIES_DISPLAY_TYPES = [
@@ -37,7 +36,6 @@ export const SINGLE_SERIES_DISPLAY_TYPES = [
     ChartDisplayType.BoldNumber,
     ChartDisplayType.CalendarHeatmap,
     ChartDisplayType.TwoDimensionalHeatmap,
-    ChartDisplayType.BoxPlot,
 ]
 
 export const NON_VALUES_ON_SERIES_DISPLAY_TYPES = [
@@ -46,7 +44,6 @@ export const NON_VALUES_ON_SERIES_DISPLAY_TYPES = [
     ChartDisplayType.BoldNumber,
     ChartDisplayType.CalendarHeatmap,
     ChartDisplayType.TwoDimensionalHeatmap,
-    ChartDisplayType.BoxPlot,
 ]
 
 /** Display types for which a percent stack view is available. */

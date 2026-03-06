@@ -109,7 +109,7 @@ export function InsightVizDisplay({
         }
 
         // Insight specific empty states - note order is important here
-        if (display === ChartDisplayType.BoxPlot && !series?.[0]?.math_property) {
+        if (display === ChartDisplayType.BoxPlot && series?.some((s) => !s.math_property)) {
             return <BoxPlotMissingPropertyState />
         }
 

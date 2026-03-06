@@ -1,5 +1,6 @@
 import { useValues } from 'kea'
 
+import { getSeriesColor } from 'lib/colors'
 import { LemonTable } from 'lib/lemon-ui/LemonTable'
 import { insightLogic } from 'scenes/insights/insightLogic'
 
@@ -9,16 +10,36 @@ import { boxPlotChartLogic } from './boxPlotChartLogic'
 
 export function BoxPlotResultsTable(): JSX.Element | null {
     const { insightProps } = useValues(insightLogic)
-    const { boxplotData } = useValues(boxPlotChartLogic(insightProps))
+    const { boxplotData, seriesGroups } = useValues(boxPlotChartLogic(insightProps))
 
     if (!boxplotData || boxplotData.length === 0) {
         return null
     }
 
+    const hasMultipleSeries = seriesGroups.length > 1
+
     return (
         <LemonTable
             dataSource={boxplotData}
             columns={[
+                ...(hasMultipleSeries
+                    ? [
+                          {
+                              title: 'Series',
+                              key: 'series',
+                              render: (_: unknown, datum: BoxPlotDatum) => (
+                                  <div className="flex items-center gap-2">
+                                      <span
+                                          className="w-2 h-2 rounded-full inline-block shrink-0"
+                                          // eslint-disable-next-line react/forbid-dom-props
+                                          style={{ backgroundColor: getSeriesColor(datum.series_index ?? 0) }}
+                                      />
+                                      {datum.series_label}
+                                  </div>
+                              ),
+                          },
+                      ]
+                    : []),
                 {
                     title: 'Date',
                     key: 'label',
@@ -61,7 +82,7 @@ export function BoxPlotResultsTable(): JSX.Element | null {
                     render: (_, datum: BoxPlotDatum) => datum.max.toLocaleString(),
                 },
             ]}
-            rowKey="day"
+            rowKey={(datum) => `${datum.series_index ?? 0}-${datum.day}`}
         />
     )
 }

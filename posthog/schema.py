@@ -630,6 +630,8 @@ class BoxPlotDatum(BaseModel):
     min: float
     p25: float
     p75: float
+    series_index: int | None = None
+    series_label: str | None = None
 
 
 class BreakdownAttributionType(StrEnum):
