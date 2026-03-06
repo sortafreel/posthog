@@ -272,9 +272,11 @@ export const workflowLogic = kea<workflowLogicType>([
         workflow: {
             defaults: NEW_WORKFLOW,
             errors: ({ name, actions, status }) => {
+                const isSavingDraft = status === 'active' && values.originalWorkflow?.status === 'active'
                 const errors = {
                     name: !name ? 'Name is required' : undefined,
                     actions:
+                        !isSavingDraft &&
                         status === 'active' &&
                         actions.some((action) => !(values.actionValidationErrorsById[action.id]?.valid ?? true))
                             ? 'Some fields need work'
@@ -490,12 +492,16 @@ export const workflowLogic = kea<workflowLogicType>([
         ],
 
         workflowHasActionErrors: [
-            (s) => [s.workflow, s.actionValidationErrorsById],
+            (s) => [s.workflow, s.actionValidationErrorsById, s.draftDeletedActionIds],
             (
                 workflow: HogFlow,
-                actionValidationErrorsById: Record<string, HogFlowActionValidationResult | null>
+                actionValidationErrorsById: Record<string, HogFlowActionValidationResult | null>,
+                draftDeletedActionIds: Set<string>
             ): boolean => {
-                return workflow.actions.some((action) => !(actionValidationErrorsById[action.id]?.valid ?? true))
+                return workflow.actions.some(
+                    (action) =>
+                        !draftDeletedActionIds.has(action.id) && !(actionValidationErrorsById[action.id]?.valid ?? true)
+                )
             },
         ],
 

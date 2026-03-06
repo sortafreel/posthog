@@ -187,6 +187,9 @@ export const WorkflowSceneHeader = (props: WorkflowSceneLogicProps = {}): JSX.El
                                     size="small"
                                     onClick={publishDraft}
                                     loading={isWorkflowSubmitting}
+                                    disabledReason={
+                                        workflowHasActionErrors ? 'Fix all errors before publishing' : undefined
+                                    }
                                     data-attr="workflow-publish"
                                 >
                                     Publish
