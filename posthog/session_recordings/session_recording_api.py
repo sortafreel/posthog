@@ -741,7 +741,7 @@ class SessionRecordingViewSet(
         deleted_by = cast(User, request.user).email
         failed_ids = self._delete_via_recording_api([recording.session_id], deleted_by=deleted_by)
         if failed_ids:
-            raise exceptions.APIException("Failed to delete recording via recording-api")
+            raise exceptions.APIException(f"Failed to delete recording {recording.session_id} via recording-api")
 
         return Response({"success": True}, status=204)
 
