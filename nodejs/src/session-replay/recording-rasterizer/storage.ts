@@ -1,6 +1,6 @@
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { randomUUID } from 'crypto'
-import * as fs from 'fs/promises'
+import * as fs from 'fs'
 
 import { config } from './config'
 
@@ -18,13 +18,12 @@ function getS3Client(): S3Client {
 
 export async function uploadToS3(localPath: string, bucket: string, keyPrefix: string): Promise<string> {
     const key = `${keyPrefix}/${randomUUID()}.mp4`
-    const body = await fs.readFile(localPath)
 
     await getS3Client().send(
         new PutObjectCommand({
             Bucket: bucket,
             Key: key,
-            Body: body,
+            Body: fs.createReadStream(localPath),
             ContentType: 'video/mp4',
         })
     )

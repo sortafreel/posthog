@@ -53,11 +53,9 @@ async function main(): Promise<void> {
 
     const runningWorker = await worker
 
-    const shutdown = async () => {
+    const shutdown = () => {
         console.log('Shutting down...')
         runningWorker.shutdown()
-        await pool.shutdown()
-        process.exit(0)
     }
 
     process.on('SIGTERM', shutdown)
@@ -65,6 +63,9 @@ async function main(): Promise<void> {
 
     console.log(`Worker started on queue "${config.taskQueue}"`)
     await runningWorker.run()
+
+    // run() resolves after shutdown drains all in-flight activities
+    await pool.shutdown()
 }
 
 main().catch((err) => {

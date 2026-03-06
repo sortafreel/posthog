@@ -12,16 +12,28 @@ export class BrowserPool {
 
     constructor(private recycleAfter: number = config.browserRecycleAfter) {}
 
+    private launching: Promise<void> | null = null
+
     async launch(): Promise<void> {
         if (this.browser) {
             return
         }
-        this.browser = await puppeteer.launch({
-            headless: config.headless,
-            executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
-            args: LAUNCH_ARGS,
-        })
-        this.usageCount = 0
+        if (this.launching) {
+            return this.launching
+        }
+        this.launching = (async () => {
+            this.browser = await puppeteer.launch({
+                headless: config.headless,
+                executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+                args: LAUNCH_ARGS,
+            })
+            this.usageCount = 0
+        })()
+        try {
+            await this.launching
+        } finally {
+            this.launching = null
+        }
     }
 
     async getPage(): Promise<Page> {
