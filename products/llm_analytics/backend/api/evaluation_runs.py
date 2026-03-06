@@ -94,7 +94,7 @@ class EvaluationRunViewSet(TeamAndOrgViewSetMixin, viewsets.ViewSet):
                 elements_chain,
                 created_at,
                 person_id
-            FROM events
+            FROM ai_events
             WHERE {" AND ".join(where_clauses)}
             LIMIT 1
             """,

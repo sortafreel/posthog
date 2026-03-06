@@ -31,43 +31,45 @@ class TestEventTaxonomyQueryRunner(ClickhouseTestMixin, APIBaseTest):
             team=self.team,
         )
         _create_event(
-            event="event1",
+            event="$ai_generation",
             distinct_id="person1",
             properties={"$browser": "Chrome", "$country": "US"},
             team=self.team,
         )
         _create_event(
-            event="event1",
+            event="$ai_generation",
             distinct_id="person1",
             properties={"$browser": "Safari", "$country": "UK"},
             team=self.team,
         )
         _create_event(
-            event="event1",
+            event="$ai_generation",
             distinct_id="person1",
             properties={"$browser": "Firefox", "$country": "US"},
             team=self.team,
         )
         _create_event(
-            event="event1",
+            event="$ai_generation",
             distinct_id="person1",
             properties={"$browser": "Mobile Safari", "$country": "UK"},
             team=self.team,
         )
         _create_event(
-            event="event1",
+            event="$ai_generation",
             distinct_id="person1",
             properties={"$browser": "Netscape", "$country": "US"},
             team=self.team,
         )
         _create_event(
-            event="event1",
+            event="$ai_generation",
             distinct_id="person1",
             properties={"$browser": "Mobile Chrome", "$country": "UK"},
             team=self.team,
         )
 
-        response = EventTaxonomyQueryRunner(team=self.team, query=EventTaxonomyQuery(event="event1")).calculate()
+        response = EventTaxonomyQueryRunner(
+            team=self.team, query=EventTaxonomyQuery(event="$ai_generation")
+        ).calculate()
         self.assertEqual(len(response.results), 2)
         self.assertEqual(response.results[0].property, "$browser")
         self.assertEqual(
@@ -92,25 +94,27 @@ class TestEventTaxonomyQueryRunner(ClickhouseTestMixin, APIBaseTest):
             team=self.team,
         )
         _create_event(
-            event="event1",
+            event="$ai_generation",
             distinct_id="person1",
             properties={"$browser": "Chrome", "$country": "US"},
             team=self.team,
         )
         _create_event(
-            event="event1",
+            event="$ai_generation",
             distinct_id="person1",
             properties={"$browser": "Chrome", "$country": "UK"},
             team=self.team,
         )
         _create_event(
-            event="event2",
+            event="$ai_span",
             distinct_id="person1",
             properties={"$browser": "Safari", "$country": "UK"},
             team=self.team,
         )
 
-        response = EventTaxonomyQueryRunner(team=self.team, query=EventTaxonomyQuery(event="event1")).calculate()
+        response = EventTaxonomyQueryRunner(
+            team=self.team, query=EventTaxonomyQuery(event="$ai_generation")
+        ).calculate()
         self.assertEqual(len(response.results), 2)
         self.assertEqual(response.results[0].property, "$country")
         self.assertEqual(response.results[0].sample_values, ["UK", "US"])
@@ -126,19 +130,21 @@ class TestEventTaxonomyQueryRunner(ClickhouseTestMixin, APIBaseTest):
             team=self.team,
         )
         _create_event(
-            event="event1",
+            event="$ai_generation",
             distinct_id="person1",
             properties={"$browser__name": "Chrome", "$country": "US"},
             team=self.team,
         )
         _create_event(
-            event="event1",
+            event="$ai_generation",
             distinct_id="person1",
             properties={"$set": "data", "$set_once": "data"},
             team=self.team,
         )
 
-        response = EventTaxonomyQueryRunner(team=self.team, query=EventTaxonomyQuery(event="event1")).calculate()
+        response = EventTaxonomyQueryRunner(
+            team=self.team, query=EventTaxonomyQuery(event="$ai_generation")
+        ).calculate()
         self.assertEqual(len(response.results), 1)
         self.assertEqual(response.results[0].property, "$country")
         self.assertEqual(response.results[0].sample_values, ["US"])
@@ -156,19 +162,21 @@ class TestEventTaxonomyQueryRunner(ClickhouseTestMixin, APIBaseTest):
             team=self.team,
         )
         _create_event(
-            event="event1",
+            event="$ai_generation",
             distinct_id="person1",
             properties={"$browser": "Chrome", "$country": "US"},
             team=self.team,
         )
         _create_event(
-            event="event1",
+            event="$ai_generation",
             distinct_id="person2",
             properties={"$browser": "Chrome", "$screen": "1024x768"},
             team=self.team,
         )
 
-        response = EventTaxonomyQueryRunner(team=self.team, query=EventTaxonomyQuery(event="event1")).calculate()
+        response = EventTaxonomyQueryRunner(
+            team=self.team, query=EventTaxonomyQuery(event="$ai_generation")
+        ).calculate()
         results = sorted(response.results, key=lambda x: x.property)
         self.assertEqual(len(results), 3)
         self.assertEqual(results[0].property, "$browser")
@@ -191,12 +199,12 @@ class TestEventTaxonomyQueryRunner(ClickhouseTestMixin, APIBaseTest):
                 team=self.team,
             )
             _create_event(
-                event="event1",
+                event="$ai_generation",
                 distinct_id="person1",
                 team=self.team,
             )
 
-            runner = EventTaxonomyQueryRunner(team=self.team, query=EventTaxonomyQuery(event="event1"))
+            runner = EventTaxonomyQueryRunner(team=self.team, query=EventTaxonomyQuery(event="$ai_generation"))
             response = runner.run()
 
             assert isinstance(response, CachedEventTaxonomyQueryResponse)
@@ -204,14 +212,14 @@ class TestEventTaxonomyQueryRunner(ClickhouseTestMixin, APIBaseTest):
 
             key = response.cache_key
             _create_event(
-                event="event1",
+                event="$ai_generation",
                 distinct_id="person1",
                 properties={"$browser": "Chrome"},
                 team=self.team,
             )
             flush_persons_and_events()
 
-            runner = EventTaxonomyQueryRunner(team=self.team, query=EventTaxonomyQuery(event="event1"))
+            runner = EventTaxonomyQueryRunner(team=self.team, query=EventTaxonomyQuery(event="$ai_generation"))
             response = runner.run()
 
             assert isinstance(response, CachedEventTaxonomyQueryResponse)
@@ -219,14 +227,14 @@ class TestEventTaxonomyQueryRunner(ClickhouseTestMixin, APIBaseTest):
             self.assertEqual(len(response.results), 0)
 
         with freeze_time(now + timedelta(minutes=59)):
-            runner = EventTaxonomyQueryRunner(team=self.team, query=EventTaxonomyQuery(event="event1"))
+            runner = EventTaxonomyQueryRunner(team=self.team, query=EventTaxonomyQuery(event="$ai_generation"))
             response = runner.run()
 
             assert isinstance(response, CachedEventTaxonomyQueryResponse)
             self.assertEqual(len(response.results), 0)
 
         with freeze_time(now + timedelta(minutes=61)):
-            runner = EventTaxonomyQueryRunner(team=self.team, query=EventTaxonomyQuery(event="event1"))
+            runner = EventTaxonomyQueryRunner(team=self.team, query=EventTaxonomyQuery(event="$ai_generation"))
             response = runner.run()
 
             assert isinstance(response, CachedEventTaxonomyQueryResponse)
@@ -241,7 +249,7 @@ class TestEventTaxonomyQueryRunner(ClickhouseTestMixin, APIBaseTest):
 
         for i in range(100):
             _create_event(
-                event="event1",
+                event="$ai_generation",
                 distinct_id="person1",
                 properties={
                     f"prop_{i + 10}": "value",
@@ -254,7 +262,9 @@ class TestEventTaxonomyQueryRunner(ClickhouseTestMixin, APIBaseTest):
                 team=self.team,
             )
 
-        response = EventTaxonomyQueryRunner(team=self.team, query=EventTaxonomyQuery(event="event1")).calculate()
+        response = EventTaxonomyQueryRunner(
+            team=self.team, query=EventTaxonomyQuery(event="$ai_generation")
+        ).calculate()
         self.assertEqual(len(response.results), 500)
 
     def test_property_taxonomy_returns_unique_values_for_specified_property(self):
@@ -270,7 +280,7 @@ class TestEventTaxonomyQueryRunner(ClickhouseTestMixin, APIBaseTest):
         )
 
         _create_event(
-            event="event1",
+            event="$ai_generation",
             distinct_id="person1",
             properties={"$host": "us.posthog.com"},
             team=self.team,
@@ -278,7 +288,7 @@ class TestEventTaxonomyQueryRunner(ClickhouseTestMixin, APIBaseTest):
 
         for _ in range(10):
             _create_event(
-                event="event1",
+                event="$ai_generation",
                 distinct_id="person1",
                 properties={"$host": "posthog.com"},
                 team=self.team,
@@ -286,14 +296,14 @@ class TestEventTaxonomyQueryRunner(ClickhouseTestMixin, APIBaseTest):
 
         for _ in range(3):
             _create_event(
-                event="event1",
+                event="$ai_generation",
                 distinct_id="person2",
                 properties={"$host": "eu.posthog.com"},
                 team=self.team,
             )
 
         response = EventTaxonomyQueryRunner(
-            team=self.team, query=EventTaxonomyQuery(event="event1", properties=["$host"])
+            team=self.team, query=EventTaxonomyQuery(event="$ai_generation", properties=["$host"])
         ).calculate()
         self.assertEqual(len(response.results), 1)
         self.assertEqual(response.results[0].property, "$host")
@@ -313,7 +323,7 @@ class TestEventTaxonomyQueryRunner(ClickhouseTestMixin, APIBaseTest):
         )
 
         _create_event(
-            event="event1",
+            event="$ai_generation",
             distinct_id="person1",
             properties={"$host": "us.posthog.com", "$browser": "Chrome"},
             team=self.team,
@@ -321,7 +331,7 @@ class TestEventTaxonomyQueryRunner(ClickhouseTestMixin, APIBaseTest):
 
         for _ in range(10):
             _create_event(
-                event="event2",
+                event="$ai_span",
                 distinct_id="person1",
                 properties={"$host": "posthog.com", "prop": 10},
                 team=self.team,
@@ -329,13 +339,13 @@ class TestEventTaxonomyQueryRunner(ClickhouseTestMixin, APIBaseTest):
 
         for _ in range(3):
             _create_event(
-                event="event1",
+                event="$ai_generation",
                 distinct_id="person2",
                 team=self.team,
             )
 
         response = EventTaxonomyQueryRunner(
-            team=self.team, query=EventTaxonomyQuery(event="event1", properties=["$host"])
+            team=self.team, query=EventTaxonomyQuery(event="$ai_generation", properties=["$host"])
         ).calculate()
         self.assertEqual(len(response.results), 1)
         self.assertEqual(response.results[0].property, "$host")
@@ -355,7 +365,7 @@ class TestEventTaxonomyQueryRunner(ClickhouseTestMixin, APIBaseTest):
         )
 
         _create_event(
-            event="event1",
+            event="$ai_generation",
             distinct_id="person1",
             properties={"$host": "us.posthog.com", "$browser": "Chrome"},
             team=self.team,
@@ -363,7 +373,7 @@ class TestEventTaxonomyQueryRunner(ClickhouseTestMixin, APIBaseTest):
 
         for _ in range(5):
             _create_event(
-                event="event1",
+                event="$ai_generation",
                 distinct_id="person1",
                 properties={"$host": "posthog.com", "prop": 10},
                 team=self.team,
@@ -371,13 +381,13 @@ class TestEventTaxonomyQueryRunner(ClickhouseTestMixin, APIBaseTest):
 
         for _ in range(3):
             _create_event(
-                event="event1",
+                event="$ai_generation",
                 distinct_id="person2",
                 team=self.team,
             )
 
         response = EventTaxonomyQueryRunner(
-            team=self.team, query=EventTaxonomyQuery(event="event1", properties=["$host", "prop"])
+            team=self.team, query=EventTaxonomyQuery(event="$ai_generation", properties=["$host", "prop"])
         ).calculate()
         self.assertEqual(len(response.results), 2)
         self.assertEqual(response.results[0].property, "prop")
@@ -394,20 +404,20 @@ class TestEventTaxonomyQueryRunner(ClickhouseTestMixin, APIBaseTest):
             team=self.team,
         )
         _create_event(
-            event="event1",
+            event="$ai_generation",
             distinct_id="person1",
             properties={"$host": "us.posthog.com"},
             team=self.team,
         )
         _create_event(
-            event="event1",
+            event="$ai_generation",
             distinct_id="person2",
             properties={"prop": 10},
             team=self.team,
         )
 
         response = EventTaxonomyQueryRunner(
-            team=self.team, query=EventTaxonomyQuery(event="event1", properties=["$host", "prop"])
+            team=self.team, query=EventTaxonomyQuery(event="$ai_generation", properties=["$host", "prop"])
         ).calculate()
         self.assertEqual(len(response.results), 2)
         self.assertEqual(response.results[0].property, "prop")
@@ -424,26 +434,26 @@ class TestEventTaxonomyQueryRunner(ClickhouseTestMixin, APIBaseTest):
             team=self.team,
         )
         _create_event(
-            event="event1",
+            event="$ai_generation",
             distinct_id="person1",
             properties={"prop": "1"},
             team=self.team,
         )
         _create_event(
-            event="event1",
+            event="$ai_generation",
             distinct_id="person2",
             properties={"prop": "2"},
             team=self.team,
         )
         _create_event(
-            event="event1",
+            event="$ai_generation",
             distinct_id="person2",
             properties={"prop": "3"},
             team=self.team,
         )
 
         response = EventTaxonomyQueryRunner(
-            team=self.team, query=EventTaxonomyQuery(event="event1", properties=["prop"], maxPropertyValues=1)
+            team=self.team, query=EventTaxonomyQuery(event="$ai_generation", properties=["prop"], maxPropertyValues=1)
         ).calculate()
         self.assertEqual(len(response.results), 1)
         self.assertEqual(response.results[0].property, "prop")
@@ -457,25 +467,27 @@ class TestEventTaxonomyQueryRunner(ClickhouseTestMixin, APIBaseTest):
             team=self.team,
         )
         _create_event(
-            event="event1",
+            event="$ai_generation",
             distinct_id="person1",
             properties={"$feature/ai": "1"},
             team=self.team,
         )
         _create_event(
-            event="event1",
+            event="$ai_generation",
             distinct_id="person2",
             properties={"prop": "2"},
             team=self.team,
         )
         _create_event(
-            event="event1",
+            event="$ai_generation",
             distinct_id="person2",
             properties={"prop": "3", "$feature/dashboard": "0"},
             team=self.team,
         )
 
-        response = EventTaxonomyQueryRunner(team=self.team, query=EventTaxonomyQuery(event="event1")).calculate()
+        response = EventTaxonomyQueryRunner(
+            team=self.team, query=EventTaxonomyQuery(event="$ai_generation")
+        ).calculate()
         self.assertEqual(len(response.results), 1)
         self.assertEqual(response.results[0].property, "prop")
         self.assertEqual(response.results[0].sample_count, 2)
@@ -485,7 +497,7 @@ class TestEventTaxonomyQueryRunner(ClickhouseTestMixin, APIBaseTest):
         action = Action.objects.create(
             team=self.team,
             name="action1",
-            steps_json=[{"event": "$pageview"}],
+            steps_json=[{"event": "$ai_generation"}],
         )
         _create_person(
             distinct_ids=["person1"],
@@ -493,19 +505,19 @@ class TestEventTaxonomyQueryRunner(ClickhouseTestMixin, APIBaseTest):
             team=self.team,
         )
         _create_event(
-            event="$pageview",
+            event="$ai_generation",
             distinct_id="person1",
             properties={"ai": "true"},
             team=self.team,
         )
         _create_event(
-            event="$pageview",
+            event="$ai_generation",
             distinct_id="person1",
             properties={"dashboard": "true"},
             team=self.team,
         )
         _create_event(
-            event="event",
+            event="$ai_span",
             distinct_id="person1",
             properties={"prop": "3", "$feature/dashboard": "0"},
             team=self.team,
@@ -534,33 +546,33 @@ class TestEventTaxonomyQueryRunner(ClickhouseTestMixin, APIBaseTest):
 
         # Numeric property value event
         _create_event(
-            event="organization usage report",
+            event="$ai_generation",
             distinct_id="person1",
             properties={"organization_id": "org123", "zero_duration_recording_count_in_period": 0},
             team=self.team,
         )
         _create_event(
-            event="organization usage report",
+            event="$ai_generation",
             distinct_id="person1",
             properties={"organization_id": "org456", "zero_duration_recording_count_in_period": 10},
             team=self.team,
         )
         _create_event(
-            event="organization usage report",
+            event="$ai_generation",
             distinct_id="person1",
             properties={"organization_id": "org789", "zero_duration_recording_count_in_period": 100},
             team=self.team,
         )
         # Empty string value for numeric property event
         _create_event(
-            event="organization usage report",
+            event="$ai_generation",
             distinct_id="person1",
             properties={"organization_id": "org000", "zero_duration_recording_count_in_period": ""},
             team=self.team,
         )
         # Missing numeric property event
         _create_event(
-            event="organization usage report",
+            event="$ai_generation",
             distinct_id="person1",
             properties={"organization_id": "org999"},
             team=self.team,
@@ -568,9 +580,7 @@ class TestEventTaxonomyQueryRunner(ClickhouseTestMixin, APIBaseTest):
 
         response = EventTaxonomyQueryRunner(
             team=self.team,
-            query=EventTaxonomyQuery(
-                event="organization usage report", properties=["zero_duration_recording_count_in_period"]
-            ),
+            query=EventTaxonomyQuery(event="$ai_generation", properties=["zero_duration_recording_count_in_period"]),
         ).calculate()
 
         self.assertEqual(len(response.results), 1)
@@ -590,7 +600,7 @@ class TestEventTaxonomyQueryRunner(ClickhouseTestMixin, APIBaseTest):
 
         # Empty string value for numeric property event
         _create_event(
-            event="organization usage report",
+            event="$ai_generation",
             distinct_id="person1",
             properties={"organization_id": "org000", "zero_duration_recording_count_in_period": ""},
             team=self.team,
@@ -598,9 +608,7 @@ class TestEventTaxonomyQueryRunner(ClickhouseTestMixin, APIBaseTest):
 
         response = EventTaxonomyQueryRunner(
             team=self.team,
-            query=EventTaxonomyQuery(
-                event="organization usage report", properties=["zero_duration_recording_count_in_period"]
-            ),
+            query=EventTaxonomyQuery(event="$ai_generation", properties=["zero_duration_recording_count_in_period"]),
         ).calculate()
 
         self.assertEqual(len(response.results), 0)

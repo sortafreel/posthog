@@ -137,10 +137,10 @@ class TraceQueryRunner(AnalyticsQueryRunner[TraceQueryResponse]):
                         )
                     )
                 ) AS events,
-                argMinIf(properties.$ai_input_state,
+                argMinIf(input_state,
                          timestamp, event = '$ai_trace'
                 ) AS input_state,
-                argMinIf(properties.$ai_output_state,
+                argMinIf(output_state,
                          timestamp, event = '$ai_trace'
                 ) AS output_state,
                 ifNull(
@@ -154,7 +154,7 @@ class TraceQueryRunner(AnalyticsQueryRunner[TraceQueryResponse]):
                         timestamp,
                     )
                 ) AS trace_name
-            FROM events
+            FROM ai_events
             WHERE event IN (
                 '$ai_span', '$ai_generation', '$ai_embedding', '$ai_metric', '$ai_feedback', '$ai_trace'
             )
@@ -222,7 +222,8 @@ class TraceQueryRunner(AnalyticsQueryRunner[TraceQueryResponse]):
             "events": generations,
         }
         for raw_key, parsed_key in [("input_state", "input_state_parsed"), ("output_state", "output_state_parsed")]:
-            raw = trace_dict.get(raw_key)
+            raw = trace_dict.get(raw_key) or None
+            trace_dict[raw_key] = raw
             if raw is not None:
                 try:
                     trace_dict[parsed_key] = orjson.loads(raw)
@@ -255,12 +256,12 @@ class TraceQueryRunner(AnalyticsQueryRunner[TraceQueryResponse]):
         where_exprs: list[ast.Expr] = [
             ast.CompareOperation(
                 op=ast.CompareOperationOp.GtEq,
-                left=ast.Field(chain=["events", "timestamp"]),
+                left=ast.Field(chain=["ai_events", "timestamp"]),
                 right=self._date_range.date_from_as_hogql(),
             ),
             ast.CompareOperation(
                 op=ast.CompareOperationOp.LtEq,
-                left=ast.Field(chain=["events", "timestamp"]),
+                left=ast.Field(chain=["ai_events", "timestamp"]),
                 right=self._date_range.date_to_as_hogql(),
             ),
         ]

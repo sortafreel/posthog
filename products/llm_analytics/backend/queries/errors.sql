@@ -18,7 +18,7 @@ SELECT
     uniq(toDate(timestamp)) as days_seen,
     min(timestamp) as first_seen,
     max(timestamp) as last_seen
-FROM events
+FROM ai_events
 WHERE event IN ('$ai_generation', '$ai_span', '$ai_trace', '$ai_embedding')
     AND properties.$ai_is_error = 'true'
     AND {filters}

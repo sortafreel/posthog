@@ -95,7 +95,7 @@ class TracesQueryRunner(AnalyticsQueryRunner[TracesQueryResponse]):
                         properties.$ai_trace_id as trace_id,
                         min(timestamp) as first_ts,
                         max(timestamp) as last_ts
-                    FROM events
+                    FROM ai_events
                     WHERE event IN ('$ai_span', '$ai_generation', '$ai_embedding', '$ai_metric', '$ai_feedback', '$ai_trace')
                       AND {{conditions}}
                     GROUP BY trace_id
@@ -244,10 +244,10 @@ class TracesQueryRunner(AnalyticsQueryRunner[TracesQueryResponse]):
                         )
                     )
                 ) AS events,
-                argMinIf(properties.$ai_input_state,
+                argMinIf(input_state,
                          timestamp, event = '$ai_trace'
                 ) AS input_state,
-                argMinIf(properties.$ai_output_state,
+                argMinIf(output_state,
                          timestamp, event = '$ai_trace'
                 ) AS output_state,
                 ifNull(
@@ -281,7 +281,7 @@ class TracesQueryRunner(AnalyticsQueryRunner[TracesQueryResponse]):
                         )
                     )
                 ) AS tools
-            FROM events
+            FROM ai_events
             WHERE event IN (
                 '$ai_span', '$ai_generation', '$ai_embedding', '$ai_metric', '$ai_feedback', '$ai_trace'
             )
@@ -386,7 +386,8 @@ class TracesQueryRunner(AnalyticsQueryRunner[TracesQueryResponse]):
             "events": generations,
         }
         for raw_key, parsed_key in [("input_state", "input_state_parsed"), ("output_state", "output_state_parsed")]:
-            raw = trace_dict.get(raw_key)
+            raw = trace_dict.get(raw_key) or None
+            trace_dict[raw_key] = raw
             if raw is not None:
                 try:
                     trace_dict[parsed_key] = orjson.loads(raw)
@@ -437,7 +438,7 @@ class TracesQueryRunner(AnalyticsQueryRunner[TracesQueryResponse]):
             exprs.append(
                 ast.CompareOperation(
                     op=ast.CompareOperationOp.Eq,
-                    left=ast.Field(chain=[f"$group_{self.query.groupTypeIndex}"]),
+                    left=ast.Field(chain=["properties", f"$group_{self.query.groupTypeIndex}"]),
                     right=ast.Constant(value=self.query.groupKey),
                 )
             )
@@ -463,12 +464,12 @@ class TracesQueryRunner(AnalyticsQueryRunner[TracesQueryResponse]):
         where_exprs: list[ast.Expr] = [
             ast.CompareOperation(
                 op=ast.CompareOperationOp.GtEq,
-                left=ast.Field(chain=["events", "timestamp"]),
+                left=ast.Field(chain=["ai_events", "timestamp"]),
                 right=effective_date_range.date_from_as_hogql(),
             ),
             ast.CompareOperation(
                 op=ast.CompareOperationOp.LtEq,
-                left=ast.Field(chain=["events", "timestamp"]),
+                left=ast.Field(chain=["ai_events", "timestamp"]),
                 right=effective_date_range.date_to_as_hogql(),
             ),
         ]

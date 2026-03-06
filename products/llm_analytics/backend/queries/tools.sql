@@ -18,7 +18,7 @@ SELECT
     round(countIf(position(properties.$ai_tools_called, ',') = 0) * 100 / count()) as single_pct,
     min(timestamp) as first_seen,
     max(timestamp) as last_seen
-FROM events
+FROM ai_events
 WHERE event = '$ai_generation'
     AND properties.$ai_tools_called != ''
     AND tool != ''

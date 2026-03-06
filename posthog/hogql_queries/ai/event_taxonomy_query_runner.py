@@ -194,7 +194,7 @@ class EventTaxonomyQueryRunner(TaxonomyCacheMixin, AnalyticsQueryRunner[EventTax
                         SELECT
                             {props} as kv
                         FROM
-                            events
+                            ai_events
                         WHERE {filter}
                     )
                     ARRAY JOIN kv.1 AS key, kv.2 AS value
@@ -226,7 +226,7 @@ class EventTaxonomyQueryRunner(TaxonomyCacheMixin, AnalyticsQueryRunner[EventTax
                 SELECT
                     JSONExtractKeysAndValues(properties, 'String') as kv
                 FROM
-                    events
+                    ai_events
                 WHERE {filter}
                 ORDER BY timestamp desc
                 LIMIT 100

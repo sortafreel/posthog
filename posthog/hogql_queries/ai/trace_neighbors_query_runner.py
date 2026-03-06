@@ -122,12 +122,12 @@ class TraceNeighborsQueryRunner(AnalyticsQueryRunner[TraceNeighborsQueryResponse
             exprs=[
                 ast.CompareOperation(
                     op=ast.CompareOperationOp.GtEq,
-                    left=ast.Field(chain=["events", "timestamp"]),
+                    left=ast.Field(chain=["ai_events", "timestamp"]),
                     right=self._date_range.date_from_as_hogql(),
                 ),
                 ast.CompareOperation(
                     op=ast.CompareOperationOp.LtEq,
-                    left=ast.Field(chain=["events", "timestamp"]),
+                    left=ast.Field(chain=["ai_events", "timestamp"]),
                     right=self._date_range.date_to_as_hogql(),
                 ),
             ]
@@ -169,7 +169,7 @@ class TraceNeighborsQueryRunner(AnalyticsQueryRunner[TraceNeighborsQueryResponse
                 SELECT
                     properties.$ai_trace_id as trace_id,
                     max(timestamp) as trace_timestamp
-                FROM events
+                FROM ai_events
                 WHERE event IN ('$ai_span', '$ai_generation', '$ai_embedding', '$ai_metric', '$ai_feedback', '$ai_trace')
                   AND timestamp <= {current_timestamp}
                   AND {conditions}
@@ -189,7 +189,7 @@ class TraceNeighborsQueryRunner(AnalyticsQueryRunner[TraceNeighborsQueryResponse
                 SELECT
                     properties.$ai_trace_id as trace_id,
                     max(timestamp) as trace_timestamp
-                FROM events
+                FROM ai_events
                 WHERE event IN ('$ai_span', '$ai_generation', '$ai_embedding', '$ai_metric', '$ai_feedback', '$ai_trace')
                   AND timestamp >= {current_timestamp}
                   AND {conditions}

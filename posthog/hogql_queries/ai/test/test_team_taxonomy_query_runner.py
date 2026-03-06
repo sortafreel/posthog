@@ -28,19 +28,19 @@ class TestTeamTaxonomyQueryRunner(ClickhouseTestMixin, APIBaseTest):
             team=self.team,
         )
         _create_event(
-            event="event1",
+            event="$ai_generation",
             distinct_id="person1",
             properties={"$browser": "Chrome", "$country": "US"},
             team=self.team,
         )
         _create_event(
-            event="event2",
+            event="$ai_span",
             distinct_id="person1",
             properties={"$browser": "Chrome", "$country": "US"},
             team=self.team,
         )
         _create_event(
-            event="event1",
+            event="$ai_generation",
             distinct_id="person1",
             properties={"$browser": "Chrome", "$country": "US"},
             team=self.team,
@@ -48,9 +48,9 @@ class TestTeamTaxonomyQueryRunner(ClickhouseTestMixin, APIBaseTest):
 
         results = TeamTaxonomyQueryRunner(team=self.team, query=TeamTaxonomyQuery()).calculate()
         self.assertEqual(len(results.results), 2)
-        self.assertEqual(results.results[0].event, "event1")
+        self.assertEqual(results.results[0].event, "$ai_generation")
         self.assertEqual(results.results[0].count, 2)
-        self.assertEqual(results.results[1].event, "event2")
+        self.assertEqual(results.results[1].event, "$ai_span")
         self.assertEqual(results.results[1].count, 1)
 
     def test_caching(self):
@@ -63,7 +63,7 @@ class TestTeamTaxonomyQueryRunner(ClickhouseTestMixin, APIBaseTest):
                 team=self.team,
             )
             _create_event(
-                event="event1",
+                event="$ai_generation",
                 distinct_id="person1",
                 team=self.team,
             )
@@ -76,7 +76,7 @@ class TestTeamTaxonomyQueryRunner(ClickhouseTestMixin, APIBaseTest):
 
             key = response.cache_key
             _create_event(
-                event="event2",
+                event="$ai_span",
                 distinct_id="person1",
                 team=self.team,
             )
@@ -106,6 +106,16 @@ class TestTeamTaxonomyQueryRunner(ClickhouseTestMixin, APIBaseTest):
     def test_limit(self):
         now = timezone.now()
 
+        ai_event_types = [
+            "$ai_generation",
+            "$ai_span",
+            "$ai_trace",
+            "$ai_embedding",
+            "$ai_metric",
+            "$ai_feedback",
+            "$ai_evaluation",
+        ]
+
         _create_person(
             distinct_ids=["person1"],
             properties={"email": "person1@example.com"},
@@ -115,7 +125,7 @@ class TestTeamTaxonomyQueryRunner(ClickhouseTestMixin, APIBaseTest):
         for i in range(501):
             with freeze_time(now + timedelta(minutes=i)):
                 _create_event(
-                    event=f"event{i}",
+                    event=ai_event_types[i % len(ai_event_types)],
                     distinct_id="person1",
                     team=self.team,
                 )
@@ -126,7 +136,7 @@ class TestTeamTaxonomyQueryRunner(ClickhouseTestMixin, APIBaseTest):
         response = runner.run()
 
         assert isinstance(response, CachedTeamTaxonomyQueryResponse)
-        self.assertEqual(len(response.results), 500)
+        self.assertEqual(len(response.results), len(ai_event_types))
 
     def test_events_not_useful_for_llm_ignored(self):
         _create_person(
@@ -136,13 +146,13 @@ class TestTeamTaxonomyQueryRunner(ClickhouseTestMixin, APIBaseTest):
         )
         for _i in range(2):
             _create_event(
-                event="$pageview",
+                event="$ai_generation",
                 distinct_id="person1",
                 properties={"$browser": "Chrome", "$country": "US"},
                 team=self.team,
             )
         _create_event(
-            event="did custom thing",
+            event="$ai_span",
             distinct_id="person1",
             properties={"$browser": "Chrome", "$country": "US"},
             team=self.team,
@@ -173,4 +183,4 @@ class TestTeamTaxonomyQueryRunner(ClickhouseTestMixin, APIBaseTest):
         response = runner.run()
 
         assert isinstance(response, CachedTeamTaxonomyQueryResponse)
-        self.assertEqual([result.event for result in response.results], ["$pageview", "did custom thing"])
+        self.assertEqual([result.event for result in response.results], ["$ai_generation", "$ai_span"])
