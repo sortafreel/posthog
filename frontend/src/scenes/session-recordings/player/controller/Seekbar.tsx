@@ -108,7 +108,7 @@ export function Seekbar(): JSX.Element {
             />
 
             <div
-                className={cn('PlayerSeekbar', {
+                className={cn('PlayerSeekbar', 'PlayerSeekbar--sources', {
                     'PlayerSeekbar--scrubbing': isScrubbing,
                 })}
                 ref={seekBarRef}

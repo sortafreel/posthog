@@ -1,5 +1,5 @@
 .PlayerSeekbar {
-    --bar-height: 6px;
+    --bar-height: 4px;
     --slider-height: 20px;
     --thumb-size: 15px;
 
@@ -8,13 +8,22 @@
     width: 100%;
     height: var(--slider-height);
 
+    &--sources {
+        --bar-height: 6px;
+    }
+
     &:hover,
     &--scrubbing {
-        --bar-height: 10px;
+        --bar-height: 8px;
 
         .PlayerSeekBarPreview {
             opacity: 1;
         }
+    }
+
+    &--sources:hover,
+    &--sources#{&}--scrubbing {
+        --bar-height: 10px;
     }
 
     .PlayerSeekbar__slider {
