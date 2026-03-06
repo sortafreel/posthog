@@ -20,16 +20,16 @@ a single browser instance is reused across exports and recycled after N uses.
 
 ## Modules
 
-| File | Purpose |
-|------|---------|
-| `index.ts` | Worker entry point — launches browser pool, connects to Temporal |
-| `activities.ts` | Temporal activity: record → postprocess → upload → cleanup |
-| `recorder.ts` | Puppeteer recording logic (puppeteer-screen-recorder) |
-| `postprocess.ts` | ffmpeg post-processing (trim, speed correction, fps) |
-| `browser-pool.ts` | Warm Chromium lifecycle manager |
-| `storage.ts` | S3 upload |
-| `config.ts` | Environment variable configuration |
-| `types.ts` | Input/output contracts |
+| File              | Purpose                                                          |
+| ----------------- | ---------------------------------------------------------------- |
+| `index.ts`        | Worker entry point — launches browser pool, connects to Temporal |
+| `activities.ts`   | Temporal activity: record → postprocess → upload → cleanup       |
+| `recorder.ts`     | Puppeteer recording logic (puppeteer-screen-recorder)            |
+| `postprocess.ts`  | ffmpeg post-processing (trim, speed correction, fps)             |
+| `browser-pool.ts` | Warm Chromium lifecycle manager                                  |
+| `storage.ts`      | S3 upload                                                        |
+| `config.ts`       | Environment variable configuration                               |
+| `types.ts`        | Input/output contracts                                           |
 
 ## Two pipelines
 
