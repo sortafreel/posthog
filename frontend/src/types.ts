@@ -4366,6 +4366,7 @@ export interface Experiment {
         timeseries?: boolean
     }
     exposure_preaggregation_enabled?: boolean
+    status?: 'draft' | 'running' | 'stopped'
     _create_in_folder?: string | null
     conclusion?: ExperimentConclusion | null
     conclusion_comment?: string | null
