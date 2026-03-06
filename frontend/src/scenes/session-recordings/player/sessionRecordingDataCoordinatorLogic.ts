@@ -99,7 +99,6 @@ export const sessionRecordingDataCoordinatorLogic = kea<sessionRecordingDataCoor
                     'isNotFound',
                     'trackedWindow',
                     'snapshotSources',
-                    'snapshotsBySources',
                     'snapshotsLoading',
                     'snapshotsLoaded',
                     'currentTeam',
@@ -194,11 +193,8 @@ export const sessionRecordingDataCoordinatorLogic = kea<sessionRecordingDataCoor
             cache.processingCache = cache.processingCache || { snapshots: {} }
 
             const sources = values.snapshotSources
-            let snapshotsBySource
+            const snapshotsBySource = {} as Record<string, { snapshots: RecordingSnapshot[] }>
             if (values.snapshotStore && sources) {
-                // Build from store entries so processAllSnapshots can run
-                // Meta synthesis, mobile FullSnapshot creation, etc.
-                snapshotsBySource = {} as Record<string, { snapshots: RecordingSnapshot[] }>
                 for (let i = 0; i < sources.length; i++) {
                     const entry = values.snapshotStore.getEntry(i)
                     if (entry?.state === 'loaded' && entry.processedSnapshots?.length) {
@@ -207,8 +203,6 @@ export const sessionRecordingDataCoordinatorLogic = kea<sessionRecordingDataCoor
                         }
                     }
                 }
-            } else {
-                snapshotsBySource = values.snapshotsBySources
             }
 
             const result = await processAllSnapshots(
@@ -300,6 +294,9 @@ export const sessionRecordingDataCoordinatorLogic = kea<sessionRecordingDataCoor
                 snapshotStore: SnapshotStore | null
             ): RecordingSegment[] => {
                 const segments = createSegments(snapshots || [], start, end, trackedWindow, snapshotsByWindowId)
+                if (!snapshotStore) {
+                    return segments
+                }
                 return convertSegmentKinds(segments, snapshotStore, isLoadingSnapshots)
             },
         ],

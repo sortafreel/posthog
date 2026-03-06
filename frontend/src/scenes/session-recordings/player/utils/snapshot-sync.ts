@@ -5,22 +5,12 @@ import { findNewEvents } from '../sessionRecordingPlayerLogic'
 /**
  * Determines which new events to add to the rrweb replayer.
  *
- * Legacy path (index-based): assumes sources load sequentially so new events
- * are always appended after existing ones. Simple and fast.
- *
- * Store path (timestamp-based): sources may load out of order (e.g. seek to
- * minute 30, then load minute 5). New events can appear before, between, or
- * after existing events. Uses timestamp-count matching to find the diff.
+ * Sources may load out of order (e.g. seek to minute 30, then load minute 5).
+ * New events can appear before, between, or after existing events.
+ * Uses timestamp-count matching to find the diff.
  */
-export function selectNewEvents(
-    allSnapshots: eventWithTime[],
-    currentEvents: eventWithTime[],
-    useStoreBasedLoading: boolean
-): eventWithTime[] {
-    if (useStoreBasedLoading) {
-        return findNewEvents(allSnapshots, currentEvents)
-    }
-    return allSnapshots.slice(currentEvents.length)
+export function selectNewEvents(allSnapshots: eventWithTime[], currentEvents: eventWithTime[]): eventWithTime[] {
+    return findNewEvents(allSnapshots, currentEvents)
 }
 
 const POSITION_UPDATE_INTERVAL_MS = 5000
