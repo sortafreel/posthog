@@ -586,7 +586,7 @@ export const productConfiguration: Record<string, any> = {
         name: 'Workflows',
         iconType: 'workflows',
         projectBased: true,
-        description: 'Automate user communication and internal processes',
+        description: 'Workflows are the best tool for automating your day to day work',
     },
     Workflow: { name: 'Workflows', iconType: 'workflows', projectBased: true },
     WorkflowsLibraryTemplate: { name: 'Workflows', iconType: 'workflows', projectBased: true },

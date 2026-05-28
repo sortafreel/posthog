@@ -271,7 +271,7 @@ export const availableOnboardingProducts: AvailableOnboardingProducts = {
     },
     [ProductKey.WORKFLOWS]: {
         name: 'Workflows',
-        description: 'Automate user communication and internal processes',
+        description: 'Workflows are the best tool for automating your day to day work',
         userCentricDescription: 'Send the right message at the right time',
         capabilities: ['Event-triggered automations', 'Slack, email & webhook actions', 'User journey orchestration'],
         valueProps: [
